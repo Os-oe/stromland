@@ -97,6 +97,20 @@
 Perf nach Iteration: 60,0 fps GPU (Metal, 1600×1000, q=1) · Software 45,5 fps (q=1, über der 42er-Absenkschwelle).
 Vergleichs-Shots: `shots/iter2/` (Desktop 4 Tageszeiten + Mobile 21:15).
 
+**Verifikation (19.07., nach Re-Deploy e147087):** lokal alle 3 Suiten 2× GRÜN ·
+live-check GRÜN (HUD == echter Strommix, Legal, og.jpg 64 KB, 0 Konsolen-Fehler) ·
+suite-visual 2× GRÜN + suite-features 2× GRÜN gegen https://stromland.demo.osai.solutions ·
+Domain serviert neuen Code (Marker og.jpg/gallery-hint/fh-mobile verifiziert — kein
+`alias set` nötig, Projekt-Domain folgt Prod-Deploy).
+
+**Wand-Urteil nach Fix-Iteration: JA, gefestigt.** Dusk (21:15) und Nacht (01:00) sind
+jetzt ohne die Band-Artefakte echte Prints — der Fluss als Lichtader vor weicher
+Horizontglut, Mond ohne Banding-Ring über silbern glitzerndem Wasser. Dawn (05:30) ist
+ein stilles Türkis-Bild. Der Mittag (13:00) hat den größten Sprung gemacht (sattes
+Zenit-Blau, triumphale Sonne, sonnenbeschienenes strukturiertes Land) — ehrlich bleibt
+er das schwächste der vier Einzelbilder, aber erstmals eines, das ich zeigen würde,
+nicht nur ertragen.
+
 ## Fürs Video (op-capture-Übergabe)
 
 - **Replay „Dieser Tag"** ist das Capture-Gold: `?mock=1&seed=7` + Klick auf „Dieser Tag" → 40-s-Fahrt Sonnenaufgang→Solarflut→Abendglut→Nacht mit Fortschritts-Hairline.
