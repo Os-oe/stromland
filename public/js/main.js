@@ -26,7 +26,7 @@ function resize() {
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w; canvas.height = h;
     painter.resize(w, h);
-    finish.resize(w, h);
+    finish.resize(w, h, dpr);
   }
 }
 addEventListener('resize', resize);
@@ -84,7 +84,9 @@ function loop(t) {
     stage.style.filter = filterStr;
     stage._lastFilter = filterStr;
   }
-  finish.render(t, unrest);
+  // Finish-Pass: Korn + Vignette direkt in die Szene (reines 2D, kein
+  // mix-blend-mode/WebGL → keine ReadPixels-Stalls)
+  finish.render(ctx, t, unrest);
 
   if (t - lastHudAt > (replay ? 120 : 1000)) {
     hud.update(snap, freq);

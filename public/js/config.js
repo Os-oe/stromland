@@ -13,7 +13,7 @@ export const COMPOSITION = {
   horizon: 0.65,        // 62–68 % Bildhöhe
   ridgeCount: 6,        // 5–7 Parallax-Ridgelines
   vignette: 0.13,       // 10–15 %
-  grainOpacity: 0.10,
+  grainOpacity: 0.05,   // halbiert (Review: „TV-Static erschlägt die Strichlagen")
 };
 
 // Warmes Schwarz / kein reines Weiß

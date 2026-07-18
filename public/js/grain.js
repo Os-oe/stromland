@@ -1,115 +1,86 @@
 // Finish-Pass über alles: animiertes Film-Grain + Vignette + warmes Schwarz.
-// WebGL-Quad-Shader als Overlay-Canvas (mix-blend-mode: overlay).
-// Fallback ohne WebGL: vorgerenderte Grain-Kacheln + CSS-Vignette.
+// Reines Canvas-2D — bewusst KEIN WebGL: der frühere GL-Overlay-Canvas erzwang
+// beim Compositing (mix-blend-mode wie drawImage) ReadPixels-Stalls, sobald kein
+// Hardware-GL da war. 2D-Pattern + Overlay-Blend kann jede Plattform stallfrei.
+//
+// Korn: 6 vorgerenderte Interleaved-Gradient-Noise-Kacheln (Blue-Noise-Charakter),
+// pro Frame zyklisch + zufällig versetzt = lebendiges Filmkorn. Zellgröße ~1,5
+// CSS-px (mit devicePixelRatio skaliert) statt 3-px-TV-Static. Atem-Modulation
+// über globalAlpha. Vignette als einmal gecachter Radial-Canvas.
 
 import { COMPOSITION } from './config.js';
 
-const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
-const FS = `
-precision mediump float;
-uniform vec2 res;
-uniform float t;
-uniform float grainAmp;
-uniform float vig;
-float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)) + t) * 43758.5453); }
-void main(){
-  vec2 uv = gl_FragCoord.xy / res;
-  float g = (hash(gl_FragCoord.xy) - 0.5) * grainAmp;
-  vec2 d = uv - 0.5;
-  float v = smoothstep(0.35, 0.95, length(d) * 1.35) * vig;
-  // Overlay-Neutral ist 0.5; Grain moduliert, Vignette senkt ab; warme Tönung minimal
-  vec3 col = vec3(0.502 + g + 0.006, 0.5 + g, 0.498 + g - 0.004) - v * 0.22;
-  gl_FragColor = vec4(col, 1.0);
-}`;
+// IGN wie im Maler — feinkörnig, geordnet, kein Weißrauschen
+const ignv = (x, y) => ((52.9829189 * ((0.06711056 * x + 0.00583715 * y) % 1)) % 1);
+
+const TILE = 256;
+const AMP_MAX = 0.14; // in die Kacheln gebackene Maximal-Amplitude (Overlay-Deltas)
 
 export class Finish {
   constructor(container) {
-    this.canvas = document.createElement('canvas');
-    this.canvas.id = 'grain';
-    this.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:overlay;';
-    container.appendChild(this.canvas);
-    this.ok = this.initGL();
-    if (!this.ok) this.initFallback();
-  }
-
-  initGL() {
-    try {
-      const gl = this.canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: false });
-      if (!gl) return false;
-      const sh = (type, src) => {
-        const s = gl.createShader(type);
-        gl.shaderSource(s, src); gl.compileShader(s);
-        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-        return s;
-      };
-      const prog = gl.createProgram();
-      gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-      gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link failed');
-      gl.useProgram(prog);
-      const buf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-      const loc = gl.getAttribLocation(prog, 'p');
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      this.gl = gl;
-      this.uRes = gl.getUniformLocation(prog, 'res');
-      this.uT = gl.getUniformLocation(prog, 't');
-      this.uAmp = gl.getUniformLocation(prog, 'grainAmp');
-      this.uVig = gl.getUniformLocation(prog, 'vig');
-      return true;
-    } catch { return false; }
-  }
-
-  initFallback() {
-    // 3 Grain-Kacheln, zyklisch als Pattern; Vignette via CSS-Overlay
+    this.container = container;
+    this.canvas = null;   // Kompat: kein eigener Screen-Canvas mehr
     this.tiles = [];
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < 6; k++) {
       const c = document.createElement('canvas');
-      c.width = c.height = 192;
+      c.width = c.height = TILE;
       const g = c.getContext('2d');
-      const img = g.createImageData(192, 192);
-      for (let i = 0; i < img.data.length; i += 4) {
-        const v = 118 + Math.random() * 20;
-        img.data[i] = v + 2; img.data[i + 1] = v; img.data[i + 2] = v - 1; img.data[i + 3] = 255;
+      const img = g.createImageData(TILE, TILE);
+      const d = img.data;
+      const ox = k * 37.7, oy = k * 91.3;
+      for (let y = 0; y < TILE; y++) {
+        for (let x = 0; x < TILE; x++) {
+          const o = (y * TILE + x) * 4;
+          const v = 128 + (ignv(x + ox, y + oy) - 0.5) * 255 * AMP_MAX;
+          d[o] = v + 2; d[o + 1] = v; d[o + 2] = v - 1; d[o + 3] = 255;
+        }
       }
       g.putImageData(img, 0, 0);
       this.tiles.push(c);
     }
-    this.ctx2d = this.canvas.getContext('2d');
-    const vig = document.createElement('div');
-    vig.style.cssText = `position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center, transparent 52%, rgba(10,8,12,${COMPOSITION.vignette}) 100%);`;
-    this.canvas.parentElement.appendChild(vig);
     this.frame = 0;
+    this.vigCanvas = null;
+    this.w = 0; this.h = 0; this.dpr = 1;
   }
 
-  resize(w, h) {
-    // Grain braucht keine volle Auflösung — 1/3 reicht (Korn wird eher größer/filmischer)
-    const gw = Math.max(2, Math.round(w / 3)), gh = Math.max(2, Math.round(h / 3));
-    if (this.canvas.width !== gw || this.canvas.height !== gh) {
-      this.canvas.width = gw; this.canvas.height = gh;
-      if (this.gl) this.gl.viewport(0, 0, gw, gh);
-    }
+  resize(w, h, dpr = 1) {
+    if (w === this.w && h === this.h && dpr === this.dpr) return;
+    this.w = w; this.h = h; this.dpr = Math.max(1, dpr);
+    // Vignette einmal cachen (Radial-Gradient jede Frame neu = unnötig teuer)
+    const c = this.vigCanvas || document.createElement('canvas');
+    c.width = Math.max(2, Math.round(w / 2)); c.height = Math.max(2, Math.round(h / 2));
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
+    const grad = g.createRadialGradient(
+      c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.30,
+      c.width / 2, c.height / 2, Math.hypot(c.width, c.height) * 0.62);
+    grad.addColorStop(0, 'rgba(10,8,12,0)');
+    grad.addColorStop(0.55, `rgba(10,8,12,${COMPOSITION.vignette * 0.35})`);
+    grad.addColorStop(1, `rgba(10,8,12,${COMPOSITION.vignette * 1.7})`);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, c.width, c.height);
+    this.vigCanvas = c;
   }
 
-  render(tMs, breathe = 0) {
-    if (this.ok && this.gl) {
-      const gl = this.gl;
-      gl.uniform2f(this.uRes, this.canvas.width, this.canvas.height);
-      gl.uniform1f(this.uT, (tMs % 10000) / 300);
-      gl.uniform1f(this.uAmp, COMPOSITION.grainOpacity * (1 + breathe * 2));
-      gl.uniform1f(this.uVig, 1.0);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    } else if (this.ctx2d) {
-      this.frame++;
-      if (this.frame % 3 === 0) {
-        const tile = this.tiles[(this.frame / 3 | 0) % 3];
-        const pat = this.ctx2d.createPattern(tile, 'repeat');
-        this.ctx2d.fillStyle = pat;
-        this.ctx2d.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      }
-    }
+  // zeichnet Korn + Vignette DIREKT in den Szenen-Kontext (kein DOM-Compositing)
+  render(ctx, tMs, breathe = 0) {
+    if (!this.w) return;
+    this.frame++;
+    const amp = COMPOSITION.grainOpacity * (1 + breathe * 2);
+    const tile = this.tiles[this.frame % this.tiles.length];
+    const scale = 1.5 * this.dpr; // Kachel-px → 1,5 CSS-px Kornzelle (dpr-normiert)
+    const jx = ((this.frame * 97) % TILE), jy = ((this.frame * 61) % TILE);
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = Math.min(1, amp / AMP_MAX);
+    ctx.imageSmoothingEnabled = false; // crispes Korn, keine Matsch-Interpolation
+    ctx.scale(scale, scale);
+    ctx.translate(-jx, -jy);
+    const pat = ctx.createPattern(tile, 'repeat');
+    ctx.fillStyle = pat;
+    ctx.fillRect(0, 0, this.w / scale + TILE, this.h / scale + TILE);
+    ctx.restore();
+    // Vignette: normal komposittiert, gecacht
+    ctx.drawImage(this.vigCanvas, 0, 0, this.w, this.h);
   }
 }

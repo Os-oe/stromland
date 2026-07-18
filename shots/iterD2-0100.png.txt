@@ -1,0 +1,2 @@
+ready=True shot=shots/iterD2-0100.png
+console clean
