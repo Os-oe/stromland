@@ -268,7 +268,8 @@ export class Painter {
     const img = ctx.createImageData(W, H);
     const d = img.data;
     const stops = [
-      [0.0, p[0]], [0.34 * horF, p[1]], [0.78 * horF, p[2]], [horF, p[3]], [1, p[3]],
+      // Zenit hält seinen Ton bis 14 % — satterer Himmel oben, mehr Tiefe am Tag
+      [0.0, p[0]], [0.14 * horF, p[0]], [0.42 * horF, p[1]], [0.80 * horF, p[2]], [horF, p[3]], [1, p[3]],
     ];
     const rowColor = (fy) => {
       let i = 0;

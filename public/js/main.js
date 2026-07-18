@@ -14,6 +14,10 @@ const painter = new Painter(SEED);
 const finish = new Finish(stage);
 const hud = new Hud();
 
+// Barrierefreiheit: reduzierte Bewegung respektieren
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (REDUCED) painter.quality = 0.5;
+
 let dpr = 1;
 function resize() {
   dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -29,13 +33,14 @@ addEventListener('resize', resize);
 
 // FPS-Monitor → Qualitätsbudget 0.4..1
 const fps = { acc: 0, n: 0, val: 60 };
+const QMAX = REDUCED ? 0.5 : 1;
 function tuneQuality(dtMs) {
   fps.acc += dtMs; fps.n++;
   if (fps.acc >= 2000) {
     fps.val = 1000 / (fps.acc / fps.n);
     fps.acc = 0; fps.n = 0;
     if (fps.val < 42 && painter.quality > 0.4) painter.quality = Math.max(0.4, painter.quality - 0.15);
-    else if (fps.val > 55 && painter.quality < 1) painter.quality = Math.min(1, painter.quality + 0.1);
+    else if (fps.val > 55 && painter.quality < QMAX) painter.quality = Math.min(QMAX, painter.quality + 0.1);
   }
 }
 // Für Tests einsehbar
@@ -66,8 +71,10 @@ function loop(t) {
   // Atmen: globale Helligkeits-Oszillation um 50,00 Hz; Abweichung = Unruhe
   const unrest = Math.min(1, Math.abs(freq.dev) / 0.06);
   const period = 7000 - unrest * 2600;
-  const breathe = Math.sin((t % period) / period * Math.PI * 2) * (0.008 + unrest * 0.011)
-    + Math.max(-0.02, Math.min(0.02, freq.dev * 0.18));
+  // spürbar, nie aufdringlich; bei reduced-motion aus
+  const breathe = REDUCED ? 0 :
+    Math.sin((t % period) / period * Math.PI * 2) * (0.011 + unrest * 0.016)
+    + Math.max(-0.028, Math.min(0.028, freq.dev * 0.24));
   const sat = 0.82 + 0.30 * Math.min(1, Math.max(0, snap.share / 100));
   // quantisiert: Style-Recalc nur bei sichtbarer Änderung (~jede 3.-5. Frame)
   const bq = Math.round((1 + breathe) * 400) / 400;
@@ -117,6 +124,7 @@ function tickReplay(t) {
   // sanfte Beschleunigung am Anfang/Ende
   const e = prog < 0.5 ? 2 * prog * prog : 1 - Math.pow(-2 * prog + 2, 2) / 2;
   data.replayOffsetMin = e * replayMaxMinutes();
+  document.getElementById('replay-bar').style.width = (e * 100).toFixed(1) + '%';
 }
 
 const overlay = document.getElementById('overlay');
@@ -165,6 +173,19 @@ async function boot() {
   window.__stromland.ready = true;
   document.getElementById('stage').classList.add('ready');
   requestAnimationFrame((t) => { last = t; requestAnimationFrame(loop); });
+
+  // Erstbesuch-Hint: nur im natürlichen Live-Modus (nicht bei ?at/?mock — Determinismus)
+  const natural = !MOCK && !data.atOverride;
+  let seen = false;
+  try { seen = localStorage.getItem('stromland-seen') === '1'; } catch { /* private mode */ }
+  if (natural && !seen) {
+    const hint = document.getElementById('first-hint');
+    setTimeout(() => hint.classList.add('show'), 1800);
+    setTimeout(() => {
+      hint.classList.remove('show');
+      try { localStorage.setItem('stromland-seen', '1'); } catch { /* egal */ }
+    }, 11000);
+  }
 }
 
 boot();
