@@ -155,6 +155,15 @@ export class Painter {
       x: R() * w, y: R() * hor * 0.92, m: R(), tw: R() * Math.PI * 2,
     }));
 
+    // Sicht-Region der See: alles OBERHALB des vordersten Mittelgrund-Kamms.
+    // Dynamischer Offshore-Glitzer wird hierauf geclippt — nie über Hügeln/Turbinen.
+    this.seaClip = new Path2D();
+    const m0 = this.ridges.mid[0].pts;
+    this.seaClip.moveTo(0, 0);
+    for (const [x, y] of m0) this.seaClip.lineTo(x, y);
+    this.seaClip.lineTo(w, 0);
+    this.seaClip.closePath();
+
     this.particles = [];
   }
 
@@ -499,6 +508,18 @@ export class Painter {
         light: mix(atmos, p[3], 0.5),
       });
     }
+
+    // Atmosphärische Auflösung: die Kammbasen lösen sich zum Horizont in denselben
+    // Dunst auf, mit dem der Talboden beginnt — keine messerscharfe hor-Kante mehr.
+    {
+      const hazeC = mix(mix(p[2], p[3], 0.5), p[5], 0.22);
+      const hz = ctx.createLinearGradient(0, hor - h * 0.035, 0, hor + 1);
+      hz.addColorStop(0, rgba(hazeC, 0));
+      hz.addColorStop(0.7, rgba(hazeC, 0.26));
+      hz.addColorStop(1, rgba(hazeC, 0.5));
+      ctx.fillStyle = hz;
+      ctx.fillRect(0, hor - h * 0.035, w, h * 0.035 + 1);
+    }
   }
 
   // Mittelgrund-Kämme: Vegetation (Biomasse) + Nebelraum für Windräder
@@ -509,36 +530,47 @@ export class Painter {
     const n = this.norm, p = this.paletteMix;
     const hor = h * COMPOSITION.horizon;
 
-    // Talboden: Land vom Horizont abwärts — LAND-Töne mit nur einem Hauch Himmelslicht
-    // (nie die gesättigten Akzent-Stops: Anti-Pattern „Neon flächig").
+    // Talboden: beginnt am Horizont als kühler, heller DISTANZ-DUNST (Wasser/Luft,
+    // Himmelslicht-Reflex) und wird nach vorn dunkler und wärmer — atmosphärische
+    // Perspektive. Kein Amber im Grundton (Khaki-Band-Bug), keine harte Kante bei hor.
     const wDayVal = this.paletteMix.weights.wDay;
     // vor Sonnenaufgang/nachts liegt das Land fast in Silhouette
     const duskDark = 0.30 * (1 - wDayVal);
-    const valleyTop = mix(mix(mix(p[5], p[4], 0.18), p[2], 0.10), BLACK_C, duskDark);
+    const hazeC = mix(mix(p[2], p[3], 0.5), p[5], 0.22);
+    const valleyTop = mix(mix(p[5], p[2], 0.24), BLACK_C, duskDark * 0.8);
     const valleyBot = mix(mix(p[6], BLACK_C, 0.15), BLACK_C, duskDark);
     const vg = ctx.createLinearGradient(0, hor, 0, h);
-    vg.addColorStop(0, rgba(valleyTop, 1));
-    vg.addColorStop(0.45, rgba(mix(valleyTop, valleyBot, 0.55), 1));
+    vg.addColorStop(0, rgba(mix(hazeC, valleyTop, 0.25), 1));
+    vg.addColorStop(0.09, rgba(mix(hazeC, valleyTop, 0.62), 1));
+    vg.addColorStop(0.28, rgba(valleyTop, 1));
+    vg.addColorStop(0.62, rgba(mix(valleyTop, valleyBot, 0.62), 1));
     vg.addColorStop(1, rgba(valleyBot, 1));
     ctx.fillStyle = vg;
     ctx.fillRect(0, hor - 1, w, h - hor + 2);
-    // beleuchtetes Becken: Licht sammelt sich um die Flussmündung, Ränder fallen ab
+    // beleuchtetes Becken: Licht sammelt sich um die Flussmündung. Abgeflachte
+    // Ellipse, Zentrum UNTER dem Horizont, Ausläufer bluten weich über hor hinweg —
+    // keine Rect-Schnittkante durchs Gradient-Zentrum (Schimmerband-Bug).
     {
-      const wDay = this.paletteMix.weights.wDay;
+      const wDay = wDayVal;
       const cx = w * 0.505;
       const rr = w * (0.40 + 0.22 * wDay);
-      const lg = ctx.createRadialGradient(cx, hor, 0, cx, hor, rr);
       const lit = mix(valleyTop, mix(p[3], p[4], wDay), 0.26);
-      lg.addColorStop(0, rgba(lit, 0.18 + 0.26 * wDay));
-      lg.addColorStop(0.55, rgba(lit, 0.06 + 0.08 * wDay));
+      ctx.save();
+      ctx.translate(cx, hor + h * 0.035);
+      ctx.scale(1, 0.42);
+      const lg = ctx.createRadialGradient(0, 0, 0, 0, 0, rr);
+      lg.addColorStop(0, rgba(lit, 0.20 + 0.26 * wDay));
+      lg.addColorStop(0.55, rgba(lit, 0.07 + 0.08 * wDay));
       lg.addColorStop(1, rgba(lit, 0));
       ctx.fillStyle = lg;
-      ctx.fillRect(cx - rr, hor - 2, rr * 2, h - hor + 2);
-      const dk = ctx.createLinearGradient(0, hor, 0, h * 0.8);
+      ctx.fillRect(-rr, -rr, rr * 2, rr * 2);
+      ctx.restore();
+      const dk = ctx.createLinearGradient(0, hor + h * 0.04, 0, h);
       dk.addColorStop(0, rgba(mix(valleyTop, BLACK_C, 0.4), 0));
-      dk.addColorStop(1, rgba(mix(valleyTop, BLACK_C, 0.5), 0.22));
+      dk.addColorStop(0.68, rgba(mix(valleyTop, BLACK_C, 0.48), 0.20));
+      dk.addColorStop(1, rgba(mix(valleyTop, BLACK_C, 0.5), 0.24));
       ctx.fillStyle = dk;
-      ctx.fillRect(0, hor, w, h * 0.8 - hor);
+      ctx.fillRect(0, hor + h * 0.04, w, h - hor - h * 0.04);
     }
     // Strichtextur über den Talboden (bricht die Fläche)
     this.strokeFill(ctx, [[0, hor - 1], [w, hor - 1]], h + 2, valleyTop, {
@@ -679,16 +711,22 @@ export class Painter {
     // Statik-Komposit (sky+celestial+far+mid+river) in einem Zug
     ctx.drawImage(this.staticC, 0, 0);
 
-    // Offshore-Schimmer (dynamisch flackernd)
+    // Offshore-Schimmer (dynamisch flackernd) — nur im Horizont-Spalt sichtbar:
+    // geclippt auf die Region über dem vordersten Mittelgrund-Kamm, nie über Hügeln.
     if (n.windOff > 0.02) {
       const seaC = mix(p[3], [255, 250, 235], 0.3);
       const dashes = Math.floor(30 * this.quality + n.windOff * 60);
+      ctx.save();
+      ctx.clip(this.seaClip);
       for (let i = 0; i < dashes; i++) {
         const x = ((i * 97.31 + tMs * 0.004 * (1 + n.windOff)) % (w * 1.1)) - w * 0.05;
         const fl = 0.5 + 0.5 * Math.sin(tMs * 0.003 + i * 2.17);
-        ctx.fillStyle = rgba(seaC, 0.10 + 0.4 * n.windOff * fl);
+        // weiches Auslaufen zu den Bildrändern (Gradient-Maske statt harter Streifen)
+        const edge = Math.min(1, Math.min(x + w * 0.05, w * 1.05 - x) / (w * 0.18));
+        ctx.fillStyle = rgba(seaC, (0.10 + 0.4 * n.windOff * fl) * Math.max(0, edge));
         ctx.fillRect(x, hor - 1.5 + Math.sin(i * 3.7) * 1.5, 3 + n.windOff * 9, 1);
       }
+      ctx.restore();
     }
 
     // Windräder (Silhouetten, Drehzahl = Wind onshore)

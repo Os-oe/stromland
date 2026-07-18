@@ -1,0 +1,6 @@
+ready=True shot=shots/bisect-noshimmer.png
+CONSOLE ISSUES:
+   warning: [.WebGL-0x12c0019c000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x12c0019c000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x12c0019c000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x12c0019c000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)

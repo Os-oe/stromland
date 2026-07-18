@@ -1,0 +1,6 @@
+ready=True shot=shots/bisect-full.png
+CONSOLE ISSUES:
+   warning: [.WebGL-0x13c0019cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x13c0019cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x13c0019cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x13c0019cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
