@@ -39,7 +39,8 @@ export default async function handler(req, res) {
   try {
     const raw = await fetchUpstream('/public_power', { country: 'de' }, 'power');
     sendJson(res, 200, { source: 'live', updated: Math.floor(Date.now() / 1000), ...reshape(raw) }, CACHE);
-  } catch {
+  } catch (e) {
+    console.error('power upstream failed:', String(e && e.message || e));
     const cached = getLastGood('power');
     if (cached) {
       sendJson(res, 200, { source: 'cache', updated: Math.floor(cached.ts / 1000), ...reshape(cached.data) }, CACHE);
