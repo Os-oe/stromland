@@ -141,7 +141,10 @@ export class Painter {
       const x = fx * w + (R() - 0.5) * w * 0.02;
       const idx = Math.round((x / w) * (ridge.length - 1));
       const y = ridge[Math.max(0, Math.min(ridge.length - 1, idx))][1] + h * 0.004;
-      return { x, y, s: h * (0.034 + R() * 0.014), phase: R() * Math.PI * 2, dir: i % 2 ? 1 : -1 };
+      // mehr Größenvarianz + je Gruppe ein „vorderes" Rad etwas größer — auf dem
+      // Desktop Charaktere statt haarfeiner Kratzer (bleiben klein: Stil-Anker)
+      const boost = (i === 1 || i === 4) ? 1.3 : 1;
+      return { x, y, s: h * (0.030 + R() * 0.020) * boost, phase: R() * Math.PI * 2, dir: i % 2 ? 1 : -1 };
     });
 
     // Offshore-Mini-Turbinen am Meeresband
@@ -242,7 +245,7 @@ export class Painter {
 
     let changed = false;
     const sunP = this.sunPos();
-    const skyKey = this.key(pk, Math.round(sunP.x / this.w * 40), Math.round(s.sunElev));
+    const skyKey = this.key(pk, Math.round(sunP.x / this.w * 40), Math.round(s.sunElev), n.solar, n.clarity);
     if (L.sky.key !== skyKey) { this.paintSky(); L.sky.key = skyKey; changed = true; }
 
     const celKey = this.key(pk, n.solar, Math.round(s.sunElev * 2) / 2, Math.round(s.minutes / 4), n.clarity);
@@ -251,7 +254,7 @@ export class Painter {
     const farKey = this.key(pk, n.fossil, n.windOff);
     if (L.far.key !== farKey) { this.paintFar(); L.far.key = farKey; changed = true; }
 
-    const midKey = this.key(pk, n.biomass, n.fossil);
+    const midKey = this.key(pk, n.biomass, n.fossil, n.solar);
     if (L.mid.key !== midKey) { this.paintMid(); L.mid.key = midKey; changed = true; }
 
     const rivKey = this.key(pk, n.hydro, n.price);
@@ -278,9 +281,20 @@ export class Painter {
     const horF = COMPOSITION.horizon;
     const img = ctx.createImageData(W, H);
     const d = img.data;
+    // Solar-Triumph: hohe Sonne + klare Luft = gesättigtes Zenit-Blau statt
+    // Weißschleier. Basis-Palette bleibt eingefroren — das ist Daten-Modulation
+    // (Solar = Licht, EE-Anteil = Klarheit), kein neuer Farb-Anker.
+    const nrm = this.norm || { solar: 0, clarity: 0.5 };
+    const zenBoost = (this.paletteMix.weights.wDay) * (0.2 + 0.6 * nrm.solar) * (0.35 + 0.65 * nrm.clarity);
+    const deepZen = [p[0][0] * 0.60, p[0][1] * 0.82, Math.min(255, p[0][2] * 1.07)];
+    const zen0 = mix(p[0], deepZen, clamp01(zenBoost));
+    const zen1 = mix(p[1], mix(p[1], deepZen, 0.5), clamp01(zenBoost) * 0.55);
+    // klare Luft drückt auch den Weißschleier überm Horizont zusammen — der Dunst
+    // bleibt (ehrlich), aber er frisst nicht mehr die halbe Himmelshöhe
+    const midSky = mix(p[2], mix(p[1], deepZen, 0.30), clamp01(zenBoost) * 0.62);
     const stops = [
       // Zenit hält seinen Ton bis 14 % — satterer Himmel oben, mehr Tiefe am Tag
-      [0.0, p[0]], [0.14 * horF, p[0]], [0.42 * horF, p[1]], [0.80 * horF, p[2]], [horF, p[3]], [1, p[3]],
+      [0.0, zen0], [0.14 * horF, zen0], [0.46 * horF, zen1], [0.82 * horF, midSky], [horF, p[3]], [1, p[3]],
     ];
     const rowColor = (fy) => {
       let i = 0;
@@ -335,32 +349,49 @@ export class Painter {
       }
     }
 
-    // Sonne: Glut + Godrays (solar > 0 und über Horizont)
+    // Sonne: Glut + Godrays (solar > 0 und über Horizont). 45 GW Sommer-Peak muss
+    // TRIUMPHAL lesen: großzügige Glut, Gold-Wash über den Himmel, präsente Rays.
     if (s.sunElev > -6 && s.solar > 50) {
       const sp = this.sunPos();
       const coreY = Math.min(sp.y, hor - h * 0.01);
       const glow = mix(p[4], [255, 242, 200], 0.6 + 0.2 * n.solar);
       const core = mix(glow, [255, 250, 232], 0.7);
       const intensity = 0.3 + 0.75 * n.solar;
-      // heller, kleiner Kern (nie harte Scheibe: Gradient bis 0) + 2 weiche Höfe
-      for (const [rad, al, col] of [[0.022, 1.15, core], [0.06, 0.75, glow], [0.15, 0.42, glow], [0.38, 0.18, glow]]) {
-        const g = ctx.createRadialGradient(sp.x, coreY, 0, sp.x, coreY, w * rad);
+      const high = smooth(8, 30, s.sunElev); // hohe Sonne = Mittagslicht
+      // Gold-Wash: warmes Licht flutet den Himmel (entsättigt genug — kein 2. Akzent)
+      if (high > 0.05 && n.solar > 0.15) {
+        const gold = [255, 236, 188];
+        const wash = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, w * 0.72);
+        wash.addColorStop(0, rgba(gold, 0.18 * n.solar * high));
+        wash.addColorStop(0.5, rgba(gold, 0.08 * n.solar * high));
+        wash.addColorStop(1, rgba(gold, 0));
+        ctx.fillStyle = wash;
+        ctx.fillRect(0, 0, w, h);
+      }
+      // heller Kern (nie harte Scheibe: Gradient bis 0) + weiche Höfe — Radius
+      // wächst mit der Solarleistung
+      const rScale = 1 + 0.5 * n.solar * (0.4 + 0.6 * high);
+      for (const [rad, al, col] of [[0.022, 1.15, core], [0.06, 0.78, glow], [0.15, 0.46, glow], [0.38, 0.20, glow]]) {
+        const g = ctx.createRadialGradient(sp.x, coreY, 0, sp.x, coreY, w * rad * rScale);
         g.addColorStop(0, rgba(col, Math.min(1, al * intensity)));
         g.addColorStop(1, rgba(col, 0));
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
       }
-      // Godrays: schmale Keile, Alpha fällt nach außen
-      const rays = 9;
+      // Godrays: schmale Keile RUND um die Sonne (bei tiefer Sonne himmelwärts
+      // gewichtet), Alpha fällt nach außen — bei Zenit-Sonne subtil, sonst Kratzer
+      const rays = 11;
       const R = mulberry32(this.seed ^ 0x77aa11);
+      const rayA = (0.14 - 0.06 * high) * intensity;
       ctx.save();
       ctx.translate(sp.x, coreY);
       for (let i = 0; i < rays; i++) {
-        const baseA = -Math.PI / 2 + (i - rays / 2) * 0.23 + (R() - 0.5) * 0.1;
-        const len = h * (0.3 + R() * 0.35) * (0.4 + 0.6 * n.solar);
+        const spreadF = 1 + high * 1.6; // hohe Sonne: voller Kranz statt Fächer
+        const baseA = -Math.PI / 2 + (i - rays / 2) * 0.23 * spreadF + (R() - 0.5) * 0.12;
+        const len = h * (0.30 + R() * 0.4) * (0.4 + 0.6 * n.solar) * (1 - high * 0.35);
         const wdt = 0.05 + R() * 0.05;
         const g = ctx.createLinearGradient(0, 0, Math.cos(baseA) * len, Math.sin(baseA) * len);
-        g.addColorStop(0, rgba(glow, 0.10 * intensity));
+        g.addColorStop(0, rgba(glow, rayA));
         g.addColorStop(1, rgba(glow, 0));
         ctx.fillStyle = g;
         ctx.beginPath();
@@ -378,8 +409,12 @@ export class Painter {
       if (mp.y < hor) {
         const moonC = mix([225, 226, 238], p[3], 0.18);
         const r = h * 0.022;
+        // Halo: geeaste Stops (nichtlinearer Abfall) — kein sichtbarer Banding-Ring
         const halo = ctx.createRadialGradient(mp.x, mp.y, 0, mp.x, mp.y, r * 7);
         halo.addColorStop(0, rgba(moonC, 0.30 * nightW));
+        halo.addColorStop(0.28, rgba(moonC, 0.13 * nightW));
+        halo.addColorStop(0.58, rgba(moonC, 0.045 * nightW));
+        halo.addColorStop(0.85, rgba(moonC, 0.012 * nightW));
         halo.addColorStop(1, rgba(moonC, 0));
         ctx.fillStyle = halo;
         ctx.fillRect(mp.x - r * 7, mp.y - r * 7, r * 14, r * 14);
@@ -389,10 +424,10 @@ export class Painter {
         disc.addColorStop(1, rgba(moonC, 0));
         ctx.fillStyle = disc;
         ctx.beginPath(); ctx.arc(mp.x, mp.y, r, 0, Math.PI * 2); ctx.fill();
-        // Mare-Andeutung: 2 dunklere Tupfer
-        ctx.fillStyle = rgba(mix(moonC, p[1], 0.5), 0.25 * nightW);
-        ctx.beginPath(); ctx.arc(mp.x - r * 0.25, mp.y - r * 0.1, r * 0.32, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(mp.x + r * 0.3, mp.y + r * 0.25, r * 0.2, 0, Math.PI * 2); ctx.fill();
+        // Mare-Andeutung: 2 kaum merkliche Schattierungen, keine „Augen"
+        ctx.fillStyle = rgba(mix(moonC, p[1], 0.45), 0.11 * nightW);
+        ctx.beginPath(); ctx.arc(mp.x - r * 0.22, mp.y - r * 0.08, r * 0.26, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(mp.x + r * 0.28, mp.y + r * 0.22, r * 0.16, 0, Math.PI * 2); ctx.fill();
       }
     }
   }
@@ -580,13 +615,14 @@ export class Painter {
       const wDay = wDayVal;
       const cx = w * 0.505;
       const rr = w * (0.40 + 0.22 * wDay);
-      const lit = mix(valleyTop, mix(p[3], p[4], wDay), 0.26);
+      const sunLit = wDay * (this.norm?.solar ?? 0); // Mittagssonne flutet das Tal
+      const lit = mix(valleyTop, mix(mix(p[3], p[4], wDay), [255, 240, 205], 0.30 * sunLit), 0.26 + 0.10 * sunLit);
       ctx.save();
       ctx.translate(cx, hor + h * 0.035);
       ctx.scale(1, 0.42);
       const lg = ctx.createRadialGradient(0, 0, 0, 0, 0, rr);
-      lg.addColorStop(0, rgba(lit, 0.20 + 0.26 * wDay));
-      lg.addColorStop(0.55, rgba(lit, 0.07 + 0.08 * wDay));
+      lg.addColorStop(0, rgba(lit, 0.20 + 0.26 * wDay + 0.16 * sunLit));
+      lg.addColorStop(0.55, rgba(lit, 0.07 + 0.08 * wDay + 0.06 * sunLit));
       lg.addColorStop(1, rgba(lit, 0));
       ctx.fillStyle = lg;
       ctx.fillRect(-rr, -rr, rr * 2, rr * 2);
@@ -634,10 +670,11 @@ export class Painter {
       const tone = mix(
         mix(mix(p[5], p[6], 0.22 + k * 0.26), atmo, r.depth * 0.62),
         BLACK_C, (0.10 + 0.08 * k) * (1 - dayW));
+      const sunLitR = dayW * (n.solar ?? 0);
       this.strokeFill(ctx, r.pts, bottom, tone, {
         count: 2800, seed: 200 + k, alpha: 0.15, len: 10 + k * 3, angle: -0.10,
-        lightAmt: 0.22 + 0.3 * dayW, // nachts kaum Lichtstriche — keine Speckles
-        light: mix(tone, p[4], 0.3 + 0.25 * dayW),
+        lightAmt: 0.22 + 0.3 * dayW + 0.22 * sunLitR, // nachts kaum Lichtstriche — keine Speckles
+        light: mix(mix(tone, p[4], 0.3 + 0.25 * dayW), [250, 240, 210], 0.25 * sunLitR),
         shade: mix(tone, BLACK_C, 0.5),
       });
 
@@ -656,7 +693,8 @@ export class Painter {
         const idx = Math.floor(fx * (r.pts.length - 1));
         const [x, yTop] = r.pts[idx];
         const y = yTop + h * 0.004 + Math.pow(R(), 1.6) * h * 0.05;
-        const len = (1.6 + R() * R() * 5.0) * sizeF * (0.8 + n.biomass * 1.1) * (1 + cluster * 0.8);
+        // nachts kürzer + leiser: Silhouetten-Tupfer, kein Stachelteppich vor hellem Tal
+        const len = (1.6 + R() * R() * 5.0) * sizeF * (0.8 + n.biomass * 1.1) * (1 + cluster * 0.8) * (0.62 + 0.38 * wDayV);
         const fan = 1 + ((R() * 2.4) | 0);
         for (let b = 0; b < fan; b++) {
           const spread = (b - (fan - 1) / 2) * 0.4 + (R() - 0.5) * 0.18;
@@ -667,6 +705,21 @@ export class Painter {
           ctx.lineTo(x + spread * len * 0.8 + (R() - 0.5) * 2, y - len * (0.75 + R() * 0.4));
           ctx.stroke();
         }
+      }
+    }
+
+    // Mittagslicht ÜBER dem Land: hohe Sonne + viel Solar = die Landschaft liegt
+    // wirklich in der Sonne (warmer, transluzenter Wash — Striche bleiben sichtbar)
+    {
+      const sunWash = this.paletteMix.weights.wDay * (n.solar ?? 0) * smooth(10, 32, this.snap.sunElev);
+      if (sunWash > 0.04) {
+        const warmL = [252, 244, 214];
+        const gWash = ctx.createLinearGradient(0, hor, 0, h);
+        gWash.addColorStop(0, rgba(warmL, 0.17 * sunWash));
+        gWash.addColorStop(0.5, rgba(warmL, 0.10 * sunWash));
+        gWash.addColorStop(1, rgba(warmL, 0.02 * sunWash));
+        ctx.fillStyle = gWash;
+        ctx.fillRect(0, hor - 1, w, h - hor + 2);
       }
     }
   }
@@ -682,8 +735,10 @@ export class Painter {
     const skyRef = mix(p[2], p[3], 0.5);
     const deep = mix(p[6], p[1], 0.35);
 
-    // Flusskörper aus Längs-Strichlagen (3 Tonlagen) — Spiegel des Himmels, kein Weißband
-    for (const [tone, aBase, wF] of [[deep, 0.55, 1.0], [mix(deep, skyRef, 0.4), 0.4, 0.72], [mix(skyRef, p[3], 0.35), 0.22 + n.hydro * 0.2, 0.38]]) {
+    // Flusskörper aus Längs-Strichlagen (3 Tonlagen) — Spiegel des Himmels, kein
+    // Weißband; nachts hebt die Himmelsspiegelung das Wasser vom dunklen Land ab
+    const nightLift = (this.paletteMix.weights.wNight || 0) * 0.12;
+    for (const [tone, aBase, wF] of [[deep, 0.55, 1.0], [mix(deep, skyRef, 0.4), 0.4, 0.72], [mix(skyRef, p[3], 0.35), 0.22 + n.hydro * 0.2 + nightLift, 0.38]]) {
       const strokes = Math.floor(300 * this.quality);
       for (let i = 0; i < strokes; i++) {
         const t0 = Math.pow(R(), 0.8) * 0.96;
@@ -790,10 +845,13 @@ export class Painter {
     const tC = mix(mix(p[5], BLACK_C, 0.62), p[2], 0.12);
     for (const tb of this.turbines) {
       const a = this.turbineAngle * tb.dir + tb.phase;
-      ctx.strokeStyle = rgba(tC, 0.74);
-      ctx.lineWidth = Math.max(0.9, tb.s * 0.05);
+      ctx.strokeStyle = rgba(tC, 0.85);
+      ctx.lineWidth = Math.max(1.2, tb.s * 0.07);
       ctx.beginPath(); ctx.moveTo(tb.x, tb.y); ctx.lineTo(tb.x, tb.y - tb.s); ctx.stroke();
-      ctx.lineWidth = Math.max(0.7, tb.s * 0.035);
+      // Gondel: winziger Punkt verankert die Blätter optisch am Mast
+      ctx.fillStyle = rgba(tC, 0.9);
+      ctx.beginPath(); ctx.arc(tb.x, tb.y - tb.s, Math.max(1, tb.s * 0.045), 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1.0, tb.s * 0.05);
       for (let b = 0; b < 3; b++) {
         const ba = a + b * (Math.PI * 2 / 3);
         ctx.beginPath();
@@ -874,8 +932,13 @@ export class Painter {
     const speed = 0.06 * dir * (0.5 + n.hydro);
     // Gegenlicht: steht die Sonne tief, fängt das Wasser den Himmel — warmer Sheen
     const lowSun = Math.max(0, Math.min(1, (16 - Math.abs(s.sunElev - 6)) / 16)) * (s.sunElev > -8 ? 1 : 0);
-    const gloss = mix(mix(p[3], [255, 252, 242], 0.4), mix(p[3], p[4], 0.5), lowSun * 0.7);
-    const glossBoost = 1 + lowSun * 0.9;
+    // Nachts fängt der Fluss das Mondlicht: kühler Silber-Glint statt dunkler Riss
+    const nightW = p.weights.wNight;
+    const moonGlint = nightW * (0.35 + 0.65 * n.hydro);
+    const gloss = mix(
+      mix(mix(p[3], [255, 252, 242], 0.4), mix(p[3], p[4], 0.5), lowSun * 0.7),
+      [198, 205, 228], nightW * 0.65);
+    const glossBoost = 1 + lowSun * 0.9 + moonGlint * 0.7;
     const widthF = 0.6 + n.hydro * 0.7;
     ctx.lineCap = 'round';
     for (let i = 0; i < count; i++) {
@@ -884,7 +947,7 @@ export class Painter {
       const q = this.riverAt(t);
       const off = Math.sin(i * 12.9898) * q.wd * widthF * 0.34;
       const len = q.wd * widthF * (0.12 + 0.1 * Math.sin(i * 3.1 + tMs * 0.001));
-      const a = (0.10 + 0.25 * n.hydro * (0.4 + 0.6 * Math.sin(tMs * 0.002 + i * 1.7) ** 2)) * glossBoost;
+      const a = (0.10 + 0.04 * moonGlint + 0.25 * n.hydro * (0.4 + 0.6 * Math.sin(tMs * 0.002 + i * 1.7) ** 2)) * glossBoost;
       ctx.strokeStyle = rgba(gloss, Math.min(0.6, a));
       ctx.lineWidth = Math.max(0.6, q.wd * widthF * 0.035);
       ctx.beginPath();
@@ -928,8 +991,8 @@ export class Painter {
       const ny = pt.y + vy * speed * dt * 0.7;
       const heightFade = pt.y < h * COMPOSITION.horizon ? 1 : 0.45;
       const lifeFade = Math.sin(clamp01(pt.age / pt.maxAge) * Math.PI);
-      pctx.strokeStyle = rgba(windC, (0.05 + 0.11 * n.windOn) * lifeFade * heightFade);
-      pctx.lineWidth = pt.y > h * 0.5 ? 1.1 : 0.8;
+      pctx.strokeStyle = rgba(windC, (0.065 + 0.13 * n.windOn) * lifeFade * heightFade);
+      pctx.lineWidth = pt.y > h * 0.5 ? 1.25 : 0.9;
       pctx.beginPath();
       pctx.moveTo(pt.x, pt.y);
       pctx.lineTo(nx, ny);
