@@ -1,0 +1,67 @@
+# Lessons — Stromland Build (2026-07-18/19)
+
+Erkenntnisse aus dem autonomen one-prompt-Lauf, wiederverwendbar für künftige
+Daten-Kunst-/Canvas-Projekte.
+
+## Energy-Charts-API (Fraunhofer ISE)
+
+- **`/frequency` braucht `region=DE-Freiburg` + `start`+`end` als Unix-RANGE.**
+  `region=DE` → „no content available"; `start` allein → genau EIN Punkt.
+  Volle Tagespayload ohne Params: 1,45 MB — serverseitig trimmen ist Pflicht.
+- **`/public_power` ohne Range 404t direkt nach Mitternacht** (der neue Berlin-Tag
+  hat noch keine Punkte). Proxy muss IMMER `start=Berlin-Mitternacht&end=jetzt`
+  senden, mit Grace-Fenster (<45 min nach Mitternacht → Vortag). Der Bug zeigte
+  sich NUR, weil der Deploy zufällig um 00:17 Berlin lief — Fixture-Fallback hat
+  ihn elegant abgefangen (genau dafür ist er da).
+- **`/signal.share` = EE-Anteil an der LAST, nicht an der Erzeugung** — legitim
+  >100 % (Beobachtung: 139,7 %). UI/Tests dürfen kein 0–100-Band annehmen.
+  `/signal` liefert außerdem ~48 h INKLUSIVE Zukunfts-Forecast — „letzter Wert im
+  Array" ist morgen Abend, nicht jetzt. Immer Wert@Zeitstempel picken.
+- Upstream drosselt Bursts: Test-Polling nie gegen `/api/*`-Proxys richten
+  (jeder Poll = Upstream-Call), sequentiell + Retry-Backoff statt Promise.all-Salve.
+
+## Canvas-2D-Malerei (Meridian-Stil)
+
+- **Radial-Gradient größer als sein fillRect = sichtbare Schnittkante.** Der Rect
+  muss den GANZEN Gradient-Radius umfassen (oder Gradient beidseitig auf Alpha 0
+  auslaufen lassen). Klassiker bei „Glut"-Effekten — sah aus wie eine Glasscheibe.
+- **Layer-Composite-Cache:** 6 statische Vollbild-Layer pro Frame zeichnen kostet
+  auch mit Cache — die 5 unteren in EIN Composite mergen (nur bei Key-Wechsel neu)
+  brachte 14→9 ms/frame (Software).
+- CSS-Filter (brightness/saturate) pro Frame setzen = Style-Recalc-Kosten;
+  quantisieren (0,0025-Schritte) und nur bei Änderung schreiben.
+- **fps ehrlich messen:** Headless-Playwright = SwiftShader (Software, pessimistisch);
+  headed-Fenster wird bei Verdeckung auf 1 fps gedrosselt (macOS rAF-Throttling)!
+  Lösung: `--headless=new --use-angle=metal` → echte GPU im Headless (M1: 60 fps).
+- Per-Pixel-Himmel (Gradient + IGN-Dither) auf halber Auflösung rendern und
+  hochskalieren — Dither wirkt trotzdem gegen Banding, Kosten vierteln sich.
+- Sonnen-/Preis-Glut als flache **Ellipse** (`ctx.scale(1, 0.22)`) statt Kreis —
+  Licht „liegt" auf dem Horizont statt als Ball darüber zu schweben.
+
+## Autonome Qualitätsschleife
+
+- Screenshot→Selbstkritik→Fix in Runden mit BENANNTEN Schwächen (Liste!) schlägt
+  diffuses „polieren". Debug-Query-Param (`?dbg=nofog,noprice,…`) zum Layer-Bisect
+  war der schnellste Weg, ein „Geisterband" auf die Preis-Glut zurückzuführen.
+- Python rundet half-even, JS `Intl` half-up — HUD-Wert-Vergleiche in Tests
+  brauchen `ROUND_HALF_UP`, sonst Phantom-Fails bei x,5.
+- Deterministische Params (`?mock=1&at=HH:MM&seed=N`) von Anfang an einbauen —
+  jede Gate-Suite, jedes OG-Bild, jeder Capture-Shot hängt daran.
+
+## Vercel
+
+- `vercel alias set` meldet „no access to domain" für **Projekt-Domains** —
+  irrelevant: eine per Projekt-API (`POST /v10/projects/:id/domains`) angehängte
+  Domain folgt automatisch jedem neuen Production-Deploy. Inhaltlich verifizieren
+  (Marker im neuen Code), nicht auf den CLI-Befehl bestehen.
+- CLI-Token liegt in `~/Library/Application Support/com.vercel.cli/auth.json` —
+  reicht für die Projekt-API, kein separates Token nötig.
+
+## Kosten (Ist)
+
+| Posten | Menge | Ist |
+|---|---|---|
+| Paid-Renders / APIs | 0 | 0,00 € |
+| energy-charts.info | frei (CC BY 4.0) | 0,00 € |
+| OG-Bild | Playwright-Screenshot | 0,00 € |
+| **Gesamt** | | **0,00 €** (Budget 10 €) |

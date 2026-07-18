@@ -13,7 +13,7 @@
 | 3 Features (Replay/Galerie/Overlay/OG) | Suite 2× inkl. Replay + Mobile | ✅ PASS (2× grün) |
 | 4 Polish (Sensations-Schleife) | ≥3 Kritik-Runden + 60fps + Wand-Urteil | ✅ PASS (3 Runden, 60fps GPU, Urteil: JA) |
 | 5 Ship (Deploy + Legal) | E2E live + alias + inhaltl. Live-Check | ✅ PASS (Live-Check + 2 E2E-Suiten grün) |
-| 6 Excellence-Pass | 10 Schwächen, Top-5-Fix, Suite 2× | — |
+| 6 Excellence-Pass | 10 Schwächen, Top-5-Fix, Suite 2× | ✅ PASS (Live-Suiten 2× grün nach Re-Deploy) |
 
 ## Upstream-Verifikation (2026-07-18, live gemessen)
 
@@ -60,6 +60,28 @@
   - Gates: `live-check.py` GRÜN (HUD == Live-API: EE 55 %, Wind 16,7 GW, Solar 0,0 GW @ 00:30 ✓, 49,991 Hz; Impressum+Datenschutz+og.png live; 0 Konsolen-Fehler) · `suite-visual.py` gegen Live GRÜN · `suite-features.py` gegen Live GRÜN.
   - Test-Lektion #2: `/signal` liefert 48h inkl. Zukunfts-Forecast — „letzter Wert" ist morgen; Vergleiche brauchen Wert@jetzt.
 
+- 2026-07-19 00:5x — **Phase 6 PASS (Excellence).** 10 Schwächen gesucht:
+  1. Erstbesuch nachts ohne Kontext → ✅ einmaliger Hint (localStorage, nur natürlicher Modus)
+  2. Replay ohne Fortschrittsanzeige → ✅ Hairline am unteren Rand
+  3. Kein prefers-reduced-motion → ✅ Atmen aus, Budget halbiert (QMAX 0.5)
+  4. Kein noscript-Fallback → ✅ poetische Meldung + Attribution
+  5. Netz-Atmen kaum spürbar (Kern-Mapping!) → ✅ Amplitude verstärkt (0.011–0.055 statt 0.008–0.04)
+  6. Tag-Zenit blass → ✅ Zenit-Stop hält bis 14 % der Horizonthöhe
+  7. Fluss endet am Vordergrund-Stratum hart → akzeptiert (liest sich als „hinterm Hügel")
+  8. Galerie-Modus schwer entdeckbar → teilgefixt (Hint nennt ihn)
+  9. Turbinen-Blade-Aliasing bei Minigrößen → offen (minor)
+  10. OG-Bild zeigt Fixture-Dusk statt Live → by design (konstanter goldene-Stunde-Hook)
+  Re-Deploy via git push (Auto-Deploy über git connect). Finale Verifikation: live-check GRÜN + Visual-Suite 2× GRÜN + Features-Suite 2× GRÜN gegen https://stromland.demo.osai.solutions.
+
+## Fürs Video (op-capture-Übergabe)
+
+- **Replay „Dieser Tag"** ist das Capture-Gold: `?mock=1&seed=7` + Klick auf „Dieser Tag" → 40-s-Fahrt Sonnenaufgang→Solarflut→Abendglut→Nacht mit Fortschritts-Hairline.
+- Einzelmomente: 21:30 Dusk (Amber-Glut + rosa Fluss-Lichtader) · 01:00 Mond+Sterne · 05:30 Türkis-Dämmerung · Galerie-Modus-Toggle (Tap → alles weg) · Info-Overlay-Scroll (poetische Legende) · Live-HUD neben echtem energy-charts-Chart als Beweis-Beat.
+- Mobile-Hochformat (390×844) sieht stark aus — 9:16-Material direkt abgreifbar.
+- Deterministisch: `?at=`, `?seed=`, `?mock=1` — jede Einstellung reproduzierbar.
+
 ## TODOs / Offenes
 
-- (leer)
+- **Sales-Board:** CC-Server (localhost:5050) lief beim Abschluss nicht → Lead-Karte + Sprint `one-prompt-kit-stromland` (Demo-Record, stage delivered, URL stromland.demo.osai.solutions, 0,00 €) noch per `POST /api/sales/leads` nachtragen, sobald das Command Center läuft.
+- `vercel alias set` CLI-Quirk bei Projekt-Domains (funktional ok — Domain folgt Prod-Deploy automatisch; siehe LESSONS).
+- Offene Minor-Schwächen: #7 Fluss/Fore-Kante, #9 Blade-Aliasing.
