@@ -21,8 +21,9 @@ export class Hud {
     this.elTitle.textContent = `Stromland — ${b.d}. ${MONTHS[(b.mo || 1) - 1]}, ${hh}:${mm}`;
 
     const gw = (mw) => de(Math.max(0, mw) / 1000, 1);
+    const narrow = matchMedia('(max-width: 520px)').matches;
     const parts = [
-      `Erneuerbare ${de(snap.share, 0)} %`,
+      `${narrow ? 'EE' : 'Erneuerbare'} ${de(snap.share, 0)} %`,
       `Wind ${gw(snap.windOn + snap.windOff)} GW`,
       `Solar ${gw(snap.solar)} GW`,
       `${de(freq.hz, 3)} Hz`,

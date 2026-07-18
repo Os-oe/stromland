@@ -86,8 +86,8 @@ export class Finish {
   }
 
   resize(w, h) {
-    // Grain braucht keine volle Auflösung — halbe reicht, spart Füllrate
-    const gw = Math.max(2, Math.round(w / 2)), gh = Math.max(2, Math.round(h / 2));
+    // Grain braucht keine volle Auflösung — 1/3 reicht (Korn wird eher größer/filmischer)
+    const gw = Math.max(2, Math.round(w / 3)), gh = Math.max(2, Math.round(h / 3));
     if (this.canvas.width !== gw || this.canvas.height !== gh) {
       this.canvas.width = gw; this.canvas.height = gh;
       if (this.gl) this.gl.viewport(0, 0, gw, gh);

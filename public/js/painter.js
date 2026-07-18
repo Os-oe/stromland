@@ -74,6 +74,9 @@ export class Painter {
     // Partikel-Canvas mit Nachleuchten
     this.pc = makeCanvas(w, h);
     this.pctx = this.pc.getContext('2d');
+    // Statik-Composite: sky+celestial+far+mid+river in EINEM Canvas (Perf)
+    this.staticC = makeCanvas(w, h);
+    this.staticCtx = this.staticC.getContext('2d');
     this.buildGeometry();
     for (const l of Object.values(this.layers)) l.key = null; // alles neu
   }
@@ -226,24 +229,34 @@ export class Painter {
     const pk = this.key(p.weights.wDay, p.weights.wNight, p.weights.isMorning ? 1 : 0);
     const L = this.layers;
 
+    let changed = false;
     const sunP = this.sunPos();
     const skyKey = this.key(pk, Math.round(sunP.x / this.w * 40), Math.round(s.sunElev));
-    if (L.sky.key !== skyKey) { this.paintSky(); L.sky.key = skyKey; }
+    if (L.sky.key !== skyKey) { this.paintSky(); L.sky.key = skyKey; changed = true; }
 
     const celKey = this.key(pk, n.solar, Math.round(s.sunElev * 2) / 2, Math.round(s.minutes / 4), n.clarity);
-    if (L.celestial.key !== celKey) { this.paintCelestial(); L.celestial.key = celKey; }
+    if (L.celestial.key !== celKey) { this.paintCelestial(); L.celestial.key = celKey; changed = true; }
 
     const farKey = this.key(pk, n.fossil, n.windOff);
-    if (L.far.key !== farKey) { this.paintFar(); L.far.key = farKey; }
+    if (L.far.key !== farKey) { this.paintFar(); L.far.key = farKey; changed = true; }
 
     const midKey = this.key(pk, n.biomass, n.fossil);
-    if (L.mid.key !== midKey) { this.paintMid(); L.mid.key = midKey; }
+    if (L.mid.key !== midKey) { this.paintMid(); L.mid.key = midKey; changed = true; }
 
     const rivKey = this.key(pk, n.hydro, n.price);
-    if (L.river.key !== rivKey) { this.paintRiver(); L.river.key = rivKey; }
+    if (L.river.key !== rivKey) { this.paintRiver(); L.river.key = rivKey; changed = true; }
 
     const foreKey = this.key(pk);
-    if (L.fore.key !== foreKey) { this.paintFore(); L.fore.key = foreKey; }
+    if (L.fore.key !== foreKey) { this.paintFore(); L.fore.key = foreKey; changed = true; }
+
+    if (changed) {
+      const sc = this.staticCtx;
+      sc.drawImage(L.sky.c, 0, 0, this.w, this.h);
+      sc.drawImage(L.celestial.c, 0, 0);
+      sc.drawImage(L.far.c, 0, 0);
+      sc.drawImage(L.mid.c, 0, 0);
+      sc.drawImage(L.river.c, 0, 0);
+    }
   }
 
   // Himmel: vertikaler 4-Stop-Gradient, per Pixel mit IGN-Dither (halbe Auflösung)
@@ -281,7 +294,8 @@ export class Painter {
       const sp = this.sunPos();
       const g = ctx.createRadialGradient(sp.x / 2, Math.min(sp.y, this.h * horF) / 2, 0, sp.x / 2, Math.min(sp.y, this.h * horF) / 2, W * 0.55);
       const warm = mix(p[3], p[4], 0.6);
-      g.addColorStop(0, rgba(warm, 0.20 * clamp01((20 - Math.abs(s.sunElev)) / 20 + 0.3)));
+      const twiBoost = this.paletteMix.weights.wTwi ?? 0;
+      g.addColorStop(0, rgba(warm, (0.20 + 0.14 * twiBoost) * clamp01((20 - Math.abs(s.sunElev)) / 20 + 0.3)));
       g.addColorStop(1, rgba(warm, 0));
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H * horF + 4);
@@ -314,11 +328,13 @@ export class Painter {
       const sp = this.sunPos();
       const coreY = Math.min(sp.y, hor - h * 0.01);
       const glow = mix(p[4], [255, 242, 200], 0.6 + 0.2 * n.solar);
+      const core = mix(glow, [255, 250, 232], 0.7);
       const intensity = 0.3 + 0.75 * n.solar;
-      for (const [rad, al] of [[0.045, 1.0], [0.13, 0.5], [0.36, 0.2]]) {
+      // heller, kleiner Kern (nie harte Scheibe: Gradient bis 0) + 2 weiche Höfe
+      for (const [rad, al, col] of [[0.022, 1.15, core], [0.06, 0.75, glow], [0.15, 0.42, glow], [0.38, 0.18, glow]]) {
         const g = ctx.createRadialGradient(sp.x, coreY, 0, sp.x, coreY, w * rad);
-        g.addColorStop(0, rgba(glow, al * intensity));
-        g.addColorStop(1, rgba(glow, 0));
+        g.addColorStop(0, rgba(col, Math.min(1, al * intensity)));
+        g.addColorStop(1, rgba(col, 0));
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
       }
@@ -494,8 +510,11 @@ export class Painter {
 
     // Talboden: Land vom Horizont abwärts — LAND-Töne mit nur einem Hauch Himmelslicht
     // (nie die gesättigten Akzent-Stops: Anti-Pattern „Neon flächig").
-    const valleyTop = mix(mix(p[5], p[4], 0.18), p[2], 0.10);
-    const valleyBot = mix(p[6], BLACK_C, 0.15);
+    const wDayVal = this.paletteMix.weights.wDay;
+    // vor Sonnenaufgang/nachts liegt das Land fast in Silhouette
+    const duskDark = 0.30 * (1 - wDayVal);
+    const valleyTop = mix(mix(mix(p[5], p[4], 0.18), p[2], 0.10), BLACK_C, duskDark);
+    const valleyBot = mix(mix(p[6], BLACK_C, 0.15), BLACK_C, duskDark);
     const vg = ctx.createLinearGradient(0, hor, 0, h);
     vg.addColorStop(0, rgba(valleyTop, 1));
     vg.addColorStop(0.45, rgba(mix(valleyTop, valleyBot, 0.55), 1));
@@ -529,17 +548,21 @@ export class Painter {
     for (let k = 0; k < this.ridges.mid.length; k++) {
       const r = this.ridges.mid[k];
       const bottom = k < this.ridges.mid.length - 1 ? Math.max(...this.ridges.mid[k + 1].pts.map((q) => q[1])) + h * 0.02 : h + 2;
-      const tone = mix(mix(p[5], p[6], 0.25 + k * 0.18), p[2], r.depth * 0.45);
+      const dayW = this.paletteMix.weights.wDay;
+      const tone = mix(mix(mix(p[5], p[6], 0.25 + k * 0.18), p[2], r.depth * 0.45), BLACK_C, 0.22 * (1 - dayW));
       this.strokeFill(ctx, r.pts, bottom, tone, {
-        count: 2400, seed: 200 + k, alpha: 0.13, len: 8 + k * 2, angle: -0.35, lightAmt: 0.45,
-        light: mix(tone, p[4], 0.55),
+        count: 2400, seed: 200 + k, alpha: 0.13, len: 8 + k * 2, angle: -0.35,
+        lightAmt: 0.2 + 0.3 * dayW, // nachts kaum Lichtstriche — keine Speckles
+        light: mix(tone, p[4], 0.3 + 0.25 * dayW),
       });
 
       // Vegetations-Striche (Biomasse): in Noise-Clustern über den Hang gestreut,
       // nie als gleichmäßige Reihe (kein „Zaun"-Effekt)
       const veg = Math.floor((140 + 850 * n.biomass) * this.quality) * (k === 2 ? 0.5 : 1);
       const R = mulberry32(this.seed ^ (300 + k));
-      const vegC = mix(tone, mix(p[4], [66, 92, 66], this.paletteMix.weights.wDay * 0.6), 0.55);
+      // Tags grünlich, nachts dunkle Silhouetten-Tupfer — nie Amber (bleibt dem Preis)
+      const wDayV = this.paletteMix.weights.wDay;
+      const vegC = mix(mix(tone, BLACK_C, 0.35), mix(tone, [66, 92, 66], 0.55), wDayV);
       ctx.lineCap = 'round';
       for (let i = 0; i < veg; i++) {
         const fx = R();
@@ -549,7 +572,7 @@ export class Painter {
         const [x, yTop] = r.pts[idx];
         const y = yTop + h * 0.004 + Math.pow(R(), 1.6) * h * 0.05;
         const len = (1.2 + R() * R() * 4.5) * (0.8 + n.biomass * 1.1) * (1 + cluster * 0.8);
-        ctx.strokeStyle = rgba(mix(vegC, p[6], R() * 0.5), 0.18 + R() * 0.34);
+        ctx.strokeStyle = rgba(mix(vegC, p[6], R() * 0.5), (0.18 + R() * 0.34) * (0.75 + 0.45 * wDayV));
         ctx.lineWidth = 0.6 + R() * 1.0;
         ctx.beginPath();
         ctx.moveTo(x + (R() - 0.5) * 3, y);
@@ -652,10 +675,8 @@ export class Painter {
     const dt = Math.min(0.1, dtMs / 1000);
     const unrest = clamp01(Math.abs(freq.dev) / 0.06);
 
-    // Layer-Komposit
-    ctx.drawImage(this.layers.sky.c, 0, 0, w, h);
-    ctx.drawImage(this.layers.celestial.c, 0, 0);
-    ctx.drawImage(this.layers.far.c, 0, 0);
+    // Statik-Komposit (sky+celestial+far+mid+river) in einem Zug
+    ctx.drawImage(this.staticC, 0, 0);
 
     // Offshore-Schimmer (dynamisch flackernd)
     if (n.windOff > 0.02) {
@@ -669,15 +690,13 @@ export class Painter {
       }
     }
 
-    ctx.drawImage(this.layers.mid.c, 0, 0);
-
     // Windräder (Silhouetten, Drehzahl = Wind onshore)
     this.turbineAngle += dt * (0.25 + n.windOn * 2.6) * Math.PI * 2 * 0.16;
     const tC = mix(mix(p[5], BLACK_C, 0.62), p[2], 0.12);
     for (const tb of this.turbines) {
       const a = this.turbineAngle * tb.dir + tb.phase;
-      ctx.strokeStyle = rgba(tC, 0.62);
-      ctx.lineWidth = Math.max(0.8, tb.s * 0.045);
+      ctx.strokeStyle = rgba(tC, 0.74);
+      ctx.lineWidth = Math.max(0.9, tb.s * 0.05);
       ctx.beginPath(); ctx.moveTo(tb.x, tb.y); ctx.lineTo(tb.x, tb.y - tb.s); ctx.stroke();
       ctx.lineWidth = Math.max(0.7, tb.s * 0.035);
       for (let b = 0; b < 3; b++) {
@@ -689,13 +708,13 @@ export class Painter {
       }
     }
 
-    ctx.drawImage(this.layers.river.c, 0, 0);
     if (!DBG.has('noshimmer')) this.renderRiverShimmer(ctx, tMs);
 
     // Klarheits-Schleier VOR dem Vordergrund: Dunst gehört in die Distanz
     const smogEarly = 1 - n.clarity;
     if (smogEarly > 0.05 && !DBG.has('noveil')) {
-      const veilC = mix(mix(p[2], [128, 120, 110], 0.5), p[5], 0.3);
+      // nachts dunklerer Dunst — Schleier hellt die Nacht nicht künstlich auf
+      const veilC = mix(mix(mix(p[2], [128, 120, 110], 0.5), p[5], 0.3), BLACK_C, 0.35 * (1 - p.weights.wDay));
       const y0 = hor - h * 0.3, y1 = hor + h * 0.14;
       const g = ctx.createLinearGradient(0, y0, 0, y1);
       g.addColorStop(0, rgba(veilC, 0));
@@ -707,26 +726,40 @@ export class Painter {
 
     ctx.drawImage(this.layers.fore.c, 0, 0);
 
-    // Amber-Glut (Preis) — DER eine gesättigte Akzent
+    // Amber-Glut (Preis) — DER eine gesättigte Akzent. Elliptisch, eng am Horizont —
+    // eine Glut, kein Band.
     if (n.price > 0.04 && !DBG.has('noprice')) {
       const sp = this.sunPos();
       const gx = s.sunElev > 0 ? sp.x : w * 0.5;
       const flick = 0.85 + 0.15 * this.noise.at(tMs * 0.0006, 3.3);
-      const a = n.price * 0.34 * flick;
-      const r = w * 0.34;
-      const g = ctx.createRadialGradient(gx, hor, 0, gx, hor, r);
-      g.addColorStop(0, rgba(AMBER_C, a));
+      const a = n.price * 0.38 * flick;
+      const r = w * 0.20;
+      ctx.save();
+      ctx.translate(gx, hor);
+      ctx.scale(1, 0.22); // flache Ellipse: Glut liegt AUF dem Horizont
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+      g.addColorStop(0, rgba(AMBER_C, Math.min(0.85, a * 1.5)));
+      g.addColorStop(0.4, rgba(AMBER_C, a * 0.5));
       g.addColorStop(1, rgba(AMBER_C, 0));
       ctx.fillStyle = g;
-      // Rect MUSS den ganzen Gradient umfassen — sonst sichtbare Schnittkante
-      ctx.fillRect(gx - r, hor - r, r * 2, r * 2);
-      // Glut-Reflex im Fluss
-      const rp = this.riverAt(0.12);
-      const g2 = ctx.createRadialGradient(rp.x, rp.y, 0, rp.x, rp.y, w * 0.05);
-      g2.addColorStop(0, rgba(AMBER_C, a * 0.9));
-      g2.addColorStop(1, rgba(AMBER_C, 0));
-      ctx.fillStyle = g2;
-      ctx.fillRect(rp.x - w * 0.05, rp.y - w * 0.05, w * 0.1, w * 0.1);
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.restore();
+      // Glut-Reflex im Fluss: länglicher Lichtpfad die Flussachse hinab
+      const glowLen = 0.16;
+      for (let i = 0; i < 7; i++) {
+        const t = 0.02 + (i / 7) * glowLen;
+        const q = this.riverAt(t);
+        const rr = q.wd * (2.2 - i * 0.22);
+        ctx.save();
+        ctx.translate(q.x, q.y);
+        ctx.scale(1, 0.35);
+        const g2 = ctx.createRadialGradient(0, 0, 0, 0, 0, rr);
+        g2.addColorStop(0, rgba(AMBER_C, a * 0.55 * (1 - i / 8)));
+        g2.addColorStop(1, rgba(AMBER_C, 0));
+        ctx.fillStyle = g2;
+        ctx.fillRect(-rr, -rr, rr * 2, rr * 2);
+        ctx.restore();
+      }
     }
 
     // Wind-Partikel (Flow-Field) auf persistentem Canvas mit Nachleuchten
@@ -740,11 +773,14 @@ export class Painter {
   }
 
   renderRiverShimmer(ctx, tMs) {
-    const n = this.norm, p = this.paletteMix;
+    const n = this.norm, p = this.paletteMix, s = this.snap;
     const dir = n.pumping ? -1 : 1; // Pumpspeicher: „Wasser fließt bergauf"
     const count = Math.floor((26 + n.hydro * 40) * this.quality);
     const speed = 0.06 * dir * (0.5 + n.hydro);
-    const gloss = mix(p[3], [255, 252, 242], 0.4);
+    // Gegenlicht: steht die Sonne tief, fängt das Wasser den Himmel — warmer Sheen
+    const lowSun = Math.max(0, Math.min(1, (16 - Math.abs(s.sunElev - 6)) / 16)) * (s.sunElev > -8 ? 1 : 0);
+    const gloss = mix(mix(p[3], [255, 252, 242], 0.4), mix(p[3], p[4], 0.5), lowSun * 0.7);
+    const glossBoost = 1 + lowSun * 0.9;
     const widthF = 0.6 + n.hydro * 0.7;
     ctx.lineCap = 'round';
     for (let i = 0; i < count; i++) {
@@ -753,8 +789,8 @@ export class Painter {
       const q = this.riverAt(t);
       const off = Math.sin(i * 12.9898) * q.wd * widthF * 0.34;
       const len = q.wd * widthF * (0.12 + 0.1 * Math.sin(i * 3.1 + tMs * 0.001));
-      const a = 0.10 + 0.25 * n.hydro * (0.4 + 0.6 * Math.sin(tMs * 0.002 + i * 1.7) ** 2);
-      ctx.strokeStyle = rgba(gloss, a);
+      const a = (0.10 + 0.25 * n.hydro * (0.4 + 0.6 * Math.sin(tMs * 0.002 + i * 1.7) ** 2)) * glossBoost;
+      ctx.strokeStyle = rgba(gloss, Math.min(0.6, a));
       ctx.lineWidth = Math.max(0.6, q.wd * widthF * 0.035);
       ctx.beginPath();
       ctx.moveTo(q.x + off - len / 2, q.y);
@@ -822,9 +858,9 @@ export class Painter {
     // gedeckter Dunstton: Himmel×Kamm mit nur einem Hauch Glutlicht (bei Dusk sonst orange)
     const fogC = mix(mix(p[2], p[5], 0.5), p[4], 0.18);
     const bands = [
-      { y: hor + h * 0.018, hh: h * 0.026, sp: 6, a: 0.085 },
+      { y: hor + h * 0.026, hh: h * 0.026, sp: 6, a: 0.06 },
       { y: hor + h * 0.085, hh: h * 0.034, sp: 10, a: 0.07 },
-      { y: hor - h * 0.024, hh: h * 0.018, sp: 4, a: 0.055 },
+      { y: hor - h * 0.024, hh: h * 0.018, sp: 4, a: 0.05 },
     ];
     const stamps = Math.floor(22 * this.quality);
     for (let b = 0; b < bands.length; b++) {

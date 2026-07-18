@@ -69,7 +69,14 @@ function loop(t) {
   const breathe = Math.sin((t % period) / period * Math.PI * 2) * (0.008 + unrest * 0.011)
     + Math.max(-0.02, Math.min(0.02, freq.dev * 0.18));
   const sat = 0.82 + 0.30 * Math.min(1, Math.max(0, snap.share / 100));
-  stage.style.filter = `brightness(${(1 + breathe).toFixed(4)}) saturate(${sat.toFixed(3)})`;
+  // quantisiert: Style-Recalc nur bei sichtbarer Änderung (~jede 3.-5. Frame)
+  const bq = Math.round((1 + breathe) * 400) / 400;
+  const sq = Math.round(sat * 200) / 200;
+  const filterStr = `brightness(${bq}) saturate(${sq})`;
+  if (filterStr !== stage._lastFilter) {
+    stage.style.filter = filterStr;
+    stage._lastFilter = filterStr;
+  }
   finish.render(t, unrest);
 
   if (t - lastHudAt > (replay ? 120 : 1000)) {

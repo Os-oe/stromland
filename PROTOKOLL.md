@@ -11,7 +11,7 @@
 | 1 Fundament (Proxy + Datenmodell + Fixture) | 3×/api/* valide + Ausfall→Fixture, Suite 2× | ✅ PASS (2× grün) |
 | 2 MVP-Gemälde (11 Mappings + Paletten) | 4-Tageszeiten-Shots + HUD==API | ✅ PASS (2× grün) |
 | 3 Features (Replay/Galerie/Overlay/OG) | Suite 2× inkl. Replay + Mobile | ✅ PASS (2× grün) |
-| 4 Polish (Sensations-Schleife) | ≥3 Kritik-Runden + 60fps + Wand-Urteil | — |
+| 4 Polish (Sensations-Schleife) | ≥3 Kritik-Runden + 60fps + Wand-Urteil | ✅ PASS (3 Runden, 60fps GPU, Urteil: JA) |
 | 5 Ship (Deploy + Legal) | E2E live + alias + inhaltl. Live-Check | — |
 | 6 Excellence-Pass | 10 Schwächen, Top-5-Fix, Suite 2× | — |
 
@@ -46,6 +46,13 @@
 
 - 2026-07-19 00:xx — **Phase 3 PASS.** Replay „Dieser Tag" (40 s, eased, Coarse-Layer-Modus), Galerie-Modus (Tap/g), Info-Overlay (poetische Legende, 10 Ebenen erklärt, Attribution, Impressum/Datenschutz verlinkt), Legal-Seiten mit echten Stammdaten, OG-Bild via Playwright (21:15 golden hour, 0 €), vollständige OG/Twitter-Meta + SVG-Favicon. `tests/suite-features.py` 2× grün + `suite-visual.py` Regression 2× grün.
   - Polish-Kandidaten (aus Mobile-Shot): Preis-Glut zu boxig (Ellipse statt Kreis nötig), Vegetations-Striche bei Dusk zu gelb (light-Param nutzt Amber), HUD-Werte-Zeile bricht auf 390px um.
+
+- 2026-07-19 01:xx — **Phase 4 PASS.** 3 Kritik-Runden dokumentiert:
+  - R1: Preis-Glut Kreis→flache Ellipse + Fluss-Lichtpfad · Sonnen-Kern strukturiert · Gegenlicht-Sheen im Fluss bei tiefer Sonne · HUD-Kurzform mobil (EE statt Erneuerbare).
+  - R2: Vegetations-Formel war rückwärts (Amber-Speckles bei Dusk) → Tag grün/Nacht Silhouette · Tal+Schleier+Mittelkämme bei Dämmerung/Nacht abgedunkelt (Land = Silhouette vor Glut-Himmel) · Dämmerungs-Glut im Himmel verstärkt.
+  - R3: Glut kompakter (r 0.30→0.20w, Kern ×1.5) · Nebelband 1 dezenter · Turbinen-Kontrast · Tages-Vegetation präsenter · **Perf: 5 Statik-Layer → 1 Composite (14→9 ms/frame Software)** · CSS-Filter quantisiert · Grain auf 1/3-Auflösung.
+  - **fps-Gate:** 60,0 fps @ q=1 auf echter GPU (Apple M1, ANGLE Metal, headless `--use-angle=metal`) · Mobile-Viewport 60 fps · Software-Fallback (SwiftShader) 47–49 fps mit adaptivem Budget (q→0.85). 
+  - **Wand-Urteil: JA.** Begründung: Dusk (21:30) und Nacht (01:00) sind eigenständige Bilder — Amber-Glut am Horizont, der Fluss als rosa Lichtader, Mond mit Hof über stiller Strata-Landschaft; ich würde beide als Print aufhängen. Dawn (05:30) ist ein stilles Silhouetten-Bild mit Türkis-Himmel. Der Tag (13:00) ist bewusst nordisch-dunstig — das schwächste Einzelbild, aber als Teil des lebenden Zyklus stimmig (und ehrlich: 45 GW Solar = gleißender Dunst-Himmel). Alle 4 Regression-Suiten grün.
 
 ## TODOs / Offenes
 
