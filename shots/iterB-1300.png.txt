@@ -1,0 +1,6 @@
+ready=True shot=shots/iterB-1300.png
+CONSOLE ISSUES:
+   warning: [.WebGL-0x1240019d200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x1240019d200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x1240019d200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+   warning: [.WebGL-0x1240019d200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)

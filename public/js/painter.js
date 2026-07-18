@@ -227,9 +227,11 @@ export class Painter {
   }
 
   // ---------- Statische Layer ----------
-  // coarse=true (Replay): gröbere Quantisierung → weniger Layer-Neuzeichnungen
+  // coarse=true (Replay): gröbere Quantisierung → weniger Layer-Neuzeichnungen.
+  // Live q=40 (0,025-Stufen): mit Dither unsichtbar, halbiert Repaint-Takt in der
+  // Dämmerung (dichtere Strichlagen = teurere Repaints).
   key(...vals) {
-    const q = this.coarse ? 25 : 100;
+    const q = this.coarse ? 25 : 40;
     return vals.map((v) => (typeof v === 'number' ? Math.round(v * q) / q : v)).join('|');
   }
 
@@ -395,10 +397,17 @@ export class Painter {
     }
   }
 
-  // Strich-Füllung eines Bandes zwischen ridgeline und unterer Grenze
+  // Strich-Füllung eines Bandes zwischen ridgeline und unterer Grenze.
+  // Auflösungs-normiert: Dichte pro FLÄCHE, Länge/Breite pro Bildbreite — 1440px+
+  // bekommt dieselbe Malerei-Dichte wie 1280px (Zancan: Dichte gewinnt).
+  // Striche folgen dem Kammverlauf (Kontur), Ton-Jitter zweiseitig (Licht UND
+  // Schatten), Strata-Bänder über vertikal feines Noise — Gouache-Lagen statt Grieß.
   strokeFill(ctx, pts, bottomY, baseColor, opts = {}) {
-    const { w } = this;
-    const count = Math.floor((opts.count || 2600) * this.quality);
+    const { w, h } = this;
+    const areaF = Math.min(2.2, (w * h) / (1280 * 800));
+    const sizeF = Math.max(0.85, w / 1500);
+    const coarseF = this.coarse ? 0.45 : 1;
+    const count = Math.floor((opts.count || 2600) * this.quality * areaF * coarseF);
     const R = mulberry32((opts.seed || 1) ^ this.seed);
     const N = this.noise;
     const yAt = (x) => {
@@ -420,22 +429,39 @@ export class Painter {
     ctx.fillStyle = rgba(baseColor, 0.88);
     ctx.fill();
     ctx.lineCap = 'round';
-    const ang = opts.angle ?? -0.32;
-    const lenBase = opts.len || 9;
+    const contour = opts.contour !== false;
+    const baseAng = opts.angle ?? -0.12;
+    const lenBase = (opts.len || 9) * sizeF;
+    const lightTone = opts.light || mix(baseColor, [255, 250, 240], 0.35);
+    const shadeTone = opts.shade || mix(baseColor, BLACK_C, 0.45);
+    const lightAmt = opts.lightAmt ?? 0.5;
+    const alphaB = opts.alpha || 0.16;
     for (let i = 0; i < count; i++) {
       const x = R() * w;
       const yTop = yAt(x);
       const y = yTop + R() * Math.max(4, bottomY - yTop);
       if (y > bottomY) continue;
-      const nz = N.fbm(x * 0.006, y * 0.006, 3);
-      const tone = mix(baseColor, opts.light || mix(baseColor, [255, 250, 240], 0.35), clamp01(0.5 + nz * 0.9) * (opts.lightAmt ?? 0.5));
-      const a2 = ang + nz * 0.55 + (R() - 0.5) * 0.3;
-      const len = lenBase * (0.6 + R() * 0.9);
-      ctx.strokeStyle = rgba(tone, (opts.alpha || 0.16) * (0.6 + R() * 0.7));
-      ctx.lineWidth = 0.8 + R() * (opts.width || 1.6);
+      // Strata: horizontal gestreckte, vertikal feine Ton-Lagen
+      const nz = N.fbm(x * 0.002 / sizeF, y * 0.014 / sizeF, 3);
+      const jit = nz * 1.1 + (R() - 0.5) * 0.55;
+      const tone = jit >= 0
+        ? mix(baseColor, lightTone, Math.min(1, jit) * lightAmt)
+        : mix(baseColor, shadeTone, Math.min(1, -jit) * 0.55);
+      let ang = baseAng + (R() - 0.5) * 0.22;
+      if (contour) {
+        const d = w * 0.006;
+        const slope = (yAt(x + d) - yAt(x - d)) / (2 * d);
+        const depthT = clamp01((y - yTop) / Math.max(1, bottomY - yTop));
+        ang += Math.atan(slope) * (1 - depthT * 0.6) + nz * 0.18;
+      } else {
+        ang += nz * 0.55;
+      }
+      const len = lenBase * (0.6 + R() * 1.1);
+      ctx.strokeStyle = rgba(tone, alphaB * (0.55 + R() * 0.75));
+      ctx.lineWidth = (0.8 + R() * (opts.width || 1.6)) * sizeF;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x + Math.cos(a2) * len, y + Math.sin(a2) * len);
+      ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
       ctx.stroke();
     }
     ctx.restore();
@@ -504,8 +530,8 @@ export class Painter {
       const scale = 0.75 + n.fossil * 0.45;
       const pts = r.pts.map(([x, y]) => [x, hor - (hor - y) * scale]);
       this.strokeFill(ctx, pts, hor + 2, atmos, {
-        count: 1900, seed: 100 + k, alpha: 0.10, len: 7, angle: -0.25, lightAmt: 0.3,
-        light: mix(atmos, p[3], 0.5),
+        count: 1900, seed: 100 + k, alpha: 0.13, len: 8, angle: -0.10, lightAmt: 0.3,
+        light: mix(atmos, p[3], 0.5), shade: mix(atmos, BLACK_C, 0.4),
       });
     }
 
@@ -572,26 +598,52 @@ export class Painter {
       ctx.fillStyle = dk;
       ctx.fillRect(0, hor + h * 0.04, w, h - hor - h * 0.04);
     }
-    // Strichtextur über den Talboden (bricht die Fläche)
+    // Strichtextur über den Talboden (bricht die Fläche) — horizontale Lagen
     this.strokeFill(ctx, [[0, hor - 1], [w, hor - 1]], h + 2, valleyTop, {
-      count: 1500, seed: 555, alpha: 0.06, len: 10, angle: -0.12, lightAmt: 0.35,
-      light: mix(valleyTop, p[3], 0.6),
+      count: 1700, seed: 555, alpha: 0.09, len: 14, angle: -0.04, lightAmt: 0.35,
+      light: mix(valleyTop, p[3], 0.6), shade: mix(valleyTop, BLACK_C, 0.4),
     });
 
+    const sizeF = Math.max(0.85, w / 1500);
+    const areaF01 = Math.min(2.2, (w * h) / (1280 * 800));
     for (let k = 0; k < this.ridges.mid.length; k++) {
       const r = this.ridges.mid[k];
       const bottom = k < this.ridges.mid.length - 1 ? Math.max(...this.ridges.mid[k + 1].pts.map((q) => q[1])) + h * 0.02 : h + 2;
       const dayW = this.paletteMix.weights.wDay;
-      const tone = mix(mix(mix(p[5], p[6], 0.25 + k * 0.18), p[2], r.depth * 0.45), BLACK_C, 0.22 * (1 - dayW));
+
+      // Dunstschicht ZWISCHEN den Kämmen (vor Kamm k+1 gestempelt, dessen Silhouette
+      // beißt sich durch den Dunst → lesbare Tiefe statt totem Mittelband)
+      if (k > 0) {
+        const fogC2 = mix(hazeC, p[3], 0.15);
+        const Rf = mulberry32(this.seed ^ (900 + k));
+        const stamps = 26;
+        for (let i = 0; i < stamps; i++) {
+          const fx = (i + Rf()) / stamps;
+          const idx = Math.floor(fx * (r.pts.length - 1));
+          const [sx, sy] = r.pts[idx];
+          const gate = 0.5 + 0.5 * this.noise.at(fx * 5.5, k * 7.7);
+          if (gate < 0.4) continue;
+          ctx.globalAlpha = (0.09 + 0.10 * gate) * (1 - k * 0.22);
+          this.stampBrush(ctx, sx, sy - h * 0.006, w * (0.06 + Rf() * 0.10), h * (0.012 + Rf() * 0.016), fogC2);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Wertetrennung: hinten hell/kühl (Fernlicht-Haze), vorn dunkler/wärmer
+      const atmo = mix(hazeC, p[3], 0.12);
+      const tone = mix(
+        mix(mix(p[5], p[6], 0.22 + k * 0.26), atmo, r.depth * 0.62),
+        BLACK_C, (0.10 + 0.08 * k) * (1 - dayW));
       this.strokeFill(ctx, r.pts, bottom, tone, {
-        count: 2400, seed: 200 + k, alpha: 0.13, len: 8 + k * 2, angle: -0.35,
-        lightAmt: 0.2 + 0.3 * dayW, // nachts kaum Lichtstriche — keine Speckles
+        count: 2800, seed: 200 + k, alpha: 0.15, len: 10 + k * 3, angle: -0.10,
+        lightAmt: 0.22 + 0.3 * dayW, // nachts kaum Lichtstriche — keine Speckles
         light: mix(tone, p[4], 0.3 + 0.25 * dayW),
+        shade: mix(tone, BLACK_C, 0.5),
       });
 
-      // Vegetations-Striche (Biomasse): in Noise-Clustern über den Hang gestreut,
-      // nie als gleichmäßige Reihe (kein „Zaun"-Effekt)
-      const veg = Math.floor((140 + 850 * n.biomass) * this.quality) * (k === 2 ? 0.5 : 1);
+      // Vegetations-Büschel (Biomasse): 1-3 Strich-Fächer je Büschel, in Noise-
+      // Clustern über den Hang gestreut, nie als gleichmäßige Reihe (kein „Zaun")
+      const veg = Math.floor((120 + 700 * n.biomass) * this.quality * areaF01) * (k === 2 ? 0.5 : 1);
       const R = mulberry32(this.seed ^ (300 + k));
       // Tags grünlich, nachts dunkle Silhouetten-Tupfer — nie Amber (bleibt dem Preis)
       const wDayV = this.paletteMix.weights.wDay;
@@ -604,13 +656,17 @@ export class Painter {
         const idx = Math.floor(fx * (r.pts.length - 1));
         const [x, yTop] = r.pts[idx];
         const y = yTop + h * 0.004 + Math.pow(R(), 1.6) * h * 0.05;
-        const len = (1.2 + R() * R() * 4.5) * (0.8 + n.biomass * 1.1) * (1 + cluster * 0.8);
-        ctx.strokeStyle = rgba(mix(vegC, p[6], R() * 0.5), (0.18 + R() * 0.34) * (0.75 + 0.45 * wDayV));
-        ctx.lineWidth = 0.6 + R() * 1.0;
-        ctx.beginPath();
-        ctx.moveTo(x + (R() - 0.5) * 3, y);
-        ctx.lineTo(x + (R() - 0.5) * 3, y - len);
-        ctx.stroke();
+        const len = (1.6 + R() * R() * 5.0) * sizeF * (0.8 + n.biomass * 1.1) * (1 + cluster * 0.8);
+        const fan = 1 + ((R() * 2.4) | 0);
+        for (let b = 0; b < fan; b++) {
+          const spread = (b - (fan - 1) / 2) * 0.4 + (R() - 0.5) * 0.18;
+          ctx.strokeStyle = rgba(mix(vegC, p[6], R() * 0.5), (0.16 + R() * 0.30) * (0.75 + 0.45 * wDayV));
+          ctx.lineWidth = (0.6 + R() * 0.9) * sizeF;
+          ctx.beginPath();
+          ctx.moveTo(x + (R() - 0.5) * 3 * sizeF, y);
+          ctx.lineTo(x + spread * len * 0.8 + (R() - 0.5) * 2, y - len * (0.75 + R() * 0.4));
+          ctx.stroke();
+        }
       }
     }
   }
@@ -675,8 +731,8 @@ export class Painter {
     const r = this.ridges.fore[0];
     const tone = mix(p[6], BLACK_C, 0.35);
     this.strokeFill(ctx, r.pts, h + 2, tone, {
-      count: 1600, seed: 400, alpha: 0.12, len: 12, angle: -0.18, lightAmt: 0.25,
-      light: mix(tone, p[5], 0.6),
+      count: 1800, seed: 400, alpha: 0.16, len: 14, angle: -0.08, lightAmt: 0.25,
+      light: mix(tone, p[5], 0.6), shade: mix(tone, BLACK_C, 0.55),
     });
   }
 
