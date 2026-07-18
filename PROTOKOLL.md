@@ -12,7 +12,7 @@
 | 2 MVP-Gemälde (11 Mappings + Paletten) | 4-Tageszeiten-Shots + HUD==API | ✅ PASS (2× grün) |
 | 3 Features (Replay/Galerie/Overlay/OG) | Suite 2× inkl. Replay + Mobile | ✅ PASS (2× grün) |
 | 4 Polish (Sensations-Schleife) | ≥3 Kritik-Runden + 60fps + Wand-Urteil | ✅ PASS (3 Runden, 60fps GPU, Urteil: JA) |
-| 5 Ship (Deploy + Legal) | E2E live + alias + inhaltl. Live-Check | — |
+| 5 Ship (Deploy + Legal) | E2E live + alias + inhaltl. Live-Check | ✅ PASS (Live-Check + 2 E2E-Suiten grün) |
 | 6 Excellence-Pass | 10 Schwächen, Top-5-Fix, Suite 2× | — |
 
 ## Upstream-Verifikation (2026-07-18, live gemessen)
@@ -53,6 +53,12 @@
   - R3: Glut kompakter (r 0.30→0.20w, Kern ×1.5) · Nebelband 1 dezenter · Turbinen-Kontrast · Tages-Vegetation präsenter · **Perf: 5 Statik-Layer → 1 Composite (14→9 ms/frame Software)** · CSS-Filter quantisiert · Grain auf 1/3-Auflösung.
   - **fps-Gate:** 60,0 fps @ q=1 auf echter GPU (Apple M1, ANGLE Metal, headless `--use-angle=metal`) · Mobile-Viewport 60 fps · Software-Fallback (SwiftShader) 47–49 fps mit adaptivem Budget (q→0.85). 
   - **Wand-Urteil: JA.** Begründung: Dusk (21:30) und Nacht (01:00) sind eigenständige Bilder — Amber-Glut am Horizont, der Fluss als rosa Lichtader, Mond mit Hof über stiller Strata-Landschaft; ich würde beide als Print aufhängen. Dawn (05:30) ist ein stilles Silhouetten-Bild mit Türkis-Himmel. Der Tag (13:00) ist bewusst nordisch-dunstig — das schwächste Einzelbild, aber als Teil des lebenden Zyklus stimmig (und ehrlich: 45 GW Solar = gleißender Dunst-Himmel). Alle 4 Regression-Suiten grün.
+
+- 2026-07-19 00:3x — **Phase 5 PASS (SHIP).** GitHub `Os-oe/stromland` (public) · Vercel `os-oes-projects/stromland` · `vercel git connect` · Domain via Projekt-API angehängt (HTTP 200, verified) → **https://stromland.demo.osai.solutions** live.
+  - **Prod-Bugfix (Echtwelt-Edge-Case):** Deploy um 00:17 Berlin → `/public_power` ohne Range = „heute" = leerer Tag = Upstream-404 → Fixture-Fallback griff (korrekt!), aber live ist besser: Proxy fragt jetzt IMMER explizit `start=Berlin-Mitternacht&end=jetzt`; < 45 min nach Mitternacht → Vortags-Mitternacht (Replay bleibt sinnvoll).
+  - **CLI-Quirk:** `vercel alias set` meldet „no access to domain" für Projekt-Domains — funktional irrelevant: Projekt-Domain folgt automatisch dem neuesten Production-Deploy (verifiziert: `source=live` via Domain, das kann nur der neue Code). In LESSONS.
+  - Gates: `live-check.py` GRÜN (HUD == Live-API: EE 55 %, Wind 16,7 GW, Solar 0,0 GW @ 00:30 ✓, 49,991 Hz; Impressum+Datenschutz+og.png live; 0 Konsolen-Fehler) · `suite-visual.py` gegen Live GRÜN · `suite-features.py` gegen Live GRÜN.
+  - Test-Lektion #2: `/signal` liefert 48h inkl. Zukunfts-Forecast — „letzter Wert" ist morgen; Vergleiche brauchen Wert@jetzt.
 
 ## TODOs / Offenes
 
