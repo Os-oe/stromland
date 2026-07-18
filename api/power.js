@@ -39,10 +39,18 @@ export default async function handler(req, res) {
   try {
     // Immer expliziter Bereich: Berlin-Mitternacht → jetzt. Ohne Range defaultet der
     // Upstream auf "heute" und liefert direkt nach Mitternacht 404 (leerer Tag).
-    const start = berlinDayStart();
     const end = Math.floor(Date.now() / 1000);
-    const raw = await fetchUpstream('/public_power', { country: 'de', start, end }, 'power');
-    if (!raw?.unix_seconds?.length) throw new Error('empty power payload');
+    let raw;
+    try {
+      raw = await fetchUpstream('/public_power', { country: 'de', start: berlinDayStart(), end }, 'power');
+      if (!raw?.unix_seconds?.length) throw new Error('empty power payload');
+    } catch (eToday) {
+      // Der neue Berlin-Tag kann auch JENSEITS des Grace-Fensters noch leer sein
+      // (Beobachtung: 00:52 → Upstream-404). Kein Zeit-Raten: einmal mit
+      // Vortags-Mitternacht retrien — Replay bleibt sinnvoll, Werte sind aktuell.
+      raw = await fetchUpstream('/public_power', { country: 'de', start: berlinDayStart() - 86400, end }, 'power');
+      if (!raw?.unix_seconds?.length) throw new Error('empty power payload (retry)');
+    }
     sendJson(res, 200, { source: 'live', updated: end, ...reshape(raw) }, CACHE);
   } catch (e) {
     console.error('power upstream failed:', String(e && e.message || e));
