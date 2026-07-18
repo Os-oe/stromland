@@ -147,7 +147,14 @@ function wireUI() {
   // Galerie-Modus: Tap/Klick aufs Bild blendet ALLES aus
   canvas.addEventListener('click', () => {
     if (overlay.classList.contains('open')) return;
-    document.body.classList.toggle('gallery');
+    const on = document.body.classList.toggle('gallery');
+    // Exit-Hint einmal pro Sitzung — der Modus soll keine Falle sein
+    if (on && !window.__stromland._galleryHinted) {
+      window.__stromland._galleryHinted = true;
+      const gh = document.getElementById('gallery-hint');
+      gh.classList.add('show');
+      setTimeout(() => gh.classList.remove('show'), 2600);
+    }
   });
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closeOverlay(); document.body.classList.remove('gallery'); }

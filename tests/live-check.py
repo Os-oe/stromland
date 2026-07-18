@@ -74,8 +74,8 @@ with sync_playwright() as p:
     page.goto(BASE + '/datenschutz')
     ok('Vercel' in page.content(), 'Datenschutz live')
     # OG-Bild erreichbar
-    st = page.evaluate(f"fetch('{BASE}/og.png').then(r=>r.status)")
-    ok(st == 200, f'og.png erreichbar ({st})')
+    st = page.evaluate(f"fetch('{BASE}/og.jpg').then(r=>r.status)")
+    ok(st == 200, f'og.jpg erreichbar ({st})')
     page.screenshot(path='shots/live-now.png')
     page.close()
     browser.close()

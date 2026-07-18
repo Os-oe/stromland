@@ -1,10 +1,12 @@
 # Rendert das OG-Bild (1200x630) zur goldenen Stunde aus der Fixture — 0 €.
+# JPEG q85: malerischer Inhalt + Filmkorn → PNG wäre ~1 MB, JPEG < 300 KB
+# (LinkedIn/WhatsApp-Preview-Crawler mögen kleine OG-Bilder).
 # Usage: python tests/render-og.py [base_url] [out]
 import sys
 from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:5317'
-OUT = sys.argv[2] if len(sys.argv) > 2 else 'public/og.png'
+OUT = sys.argv[2] if len(sys.argv) > 2 else 'public/og.jpg'
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
@@ -16,6 +18,6 @@ with sync_playwright() as p:
     # aber Buttons ausblenden für das OG
     page.evaluate("document.getElementById('actions').style.display='none'; 1")
     page.wait_for_timeout(300)
-    page.screenshot(path=OUT)
+    page.screenshot(path=OUT, type='jpeg', quality=85)
     browser.close()
 print('og →', OUT)

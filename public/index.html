@@ -10,14 +10,14 @@
 <meta property="og:title" content="Stromland — das deutsche Stromnetz malt ein Bild">
 <meta property="og:description" content="Ein lebendes Landschaftsgemälde, gemalt vom deutschen Strommix in Echtzeit. Nachts schläft es, an Sturmtagen tobt es — und es atmet mit der Netzfrequenz.">
 <meta property="og:url" content="https://stromland.demo.osai.solutions/">
-<meta property="og:image" content="https://stromland.demo.osai.solutions/og.png">
+<meta property="og:image" content="https://stromland.demo.osai.solutions/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="de_DE">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Stromland — das deutsche Stromnetz malt ein Bild">
 <meta name="twitter:description" content="Ein lebendes Landschaftsgemälde, gemalt vom deutschen Strommix in Echtzeit.">
-<meta name="twitter:image" content="https://stromland.demo.osai.solutions/og.png">
+<meta name="twitter:image" content="https://stromland.demo.osai.solutions/og.jpg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23141852'/%3E%3Cpath d='M0 19 Q8 15 16 18 T32 17 V32 H0 Z' fill='%232B2F77'/%3E%3Cpath d='M0 24 Q10 21 18 23.5 T32 23 V32 H0 Z' fill='%230a0e26'/%3E%3Ccircle cx='22' cy='9' r='3.4' fill='%23ffb03b'/%3E%3C/svg%3E">
 <style>
   :root { color-scheme: dark; }
@@ -71,7 +71,7 @@
     position: absolute;
     top: max(16px, env(safe-area-inset-top, 0px) + 10px);
     right: 20px;
-    display: flex; gap: 1.6em;
+    display: flex; gap: 0.7em; /* Buttons tragen jetzt eigenes Padding (Tap-Ziele) */
     font-family: Georgia, 'Times New Roman', serif;
     font-size: clamp(11px, 1.2vw, 13.5px);
     letter-spacing: 0.18em;
@@ -82,7 +82,8 @@
   #actions button {
     all: unset; cursor: pointer; color: #efe9dc;
     text-shadow: 0 1px 8px rgba(10, 8, 14, 0.55);
-    padding: 6px 2px; /* Tap-Ziel */
+    padding: 15px 12px; /* Tap-Ziel ≥44px (Apple HIG) — Optik bleibt Hairline */
+    margin: -8px 0;
   }
   #actions button:focus-visible { outline: 1px solid rgba(239,233,220,0.5); outline-offset: 3px; }
   body.gallery #hud, body.gallery #actions { opacity: 0 !important; pointer-events: none; }
@@ -102,8 +103,28 @@
     pointer-events: none;
     padding: 0 24px;
   }
-  #first-hint span { font-size: 0.72em; opacity: 0.75; letter-spacing: 0.18em; }
+  #first-hint .fh-sub { font-size: 0.72em; opacity: 0.75; letter-spacing: 0.18em; }
   #first-hint.show { opacity: 0.92; }
+  #first-hint .fh-mobile { display: none; }
+  @media (max-width: 520px) {
+    /* kurze Zeilen statt hässlichem Umbruch mitten im Gedanken */
+    #first-hint { top: 30%; line-height: 1.9; }
+    #first-hint .fh-desktop { display: none; }
+    #first-hint .fh-mobile { display: inline; }
+    #first-hint .fh-sub { display: inline-block; margin-top: 0.9em; max-width: 30ch; }
+  }
+  /* Galerie-Exit-Hint: einmal pro Sitzung, blendet sich selbst aus */
+  #gallery-hint {
+    position: absolute; left: 50%; bottom: max(30px, env(safe-area-inset-bottom, 0px) + 24px);
+    transform: translateX(-50%);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(11px, 1.3vw, 13px);
+    letter-spacing: 0.22em;
+    color: #efe9dc; opacity: 0; transition: opacity 1.2s ease;
+    text-shadow: 0 1px 10px rgba(10, 8, 14, 0.7);
+    pointer-events: none; z-index: 6;
+  }
+  #gallery-hint.show { opacity: 0.75; }
 
   /* Replay-Fortschritt: eine Hairline am unteren Rand */
   #replay-progress {
@@ -158,9 +179,9 @@
   #overlay .brand img { width: 22px; height: 22px; border-radius: 5px; }
   #overlay-close {
     all: unset; cursor: pointer; position: absolute;
-    top: max(14px, env(safe-area-inset-top, 0px) + 8px); right: 22px;
+    top: max(10px, env(safe-area-inset-top, 0px) + 4px); right: 14px;
     font-family: Georgia, serif; font-size: 26px; line-height: 1;
-    color: #efe9dc; opacity: 0.6; padding: 8px;
+    color: #efe9dc; opacity: 0.6; padding: 12px 14px; /* Tap-Ziel ≥44px */
   }
   #overlay-close:hover { opacity: 1; }
 </style>
@@ -176,10 +197,12 @@
   <div id="stage">
     <canvas id="scene"></canvas>
     <div id="first-hint" aria-hidden="true">
-      Dieses Bild malt der deutsche Strommix — jetzt, in Echtzeit.<br>
-      <span>„Legende" erklärt jede Ebene · Tippen aufs Bild = Galerie</span>
+      <span class="fh-desktop">Dieses Bild malt der deutsche Strommix — jetzt, in Echtzeit.</span>
+      <span class="fh-mobile">Der deutsche Strommix<br>malt dieses Bild — live.</span><br>
+      <span class="fh-sub">„Legende" erklärt jede Ebene · Tippen aufs Bild = Galerie</span>
     </div>
     <div id="replay-progress"><div id="replay-bar"></div></div>
+    <div id="gallery-hint" aria-hidden="true">Tippen oder Esc = zurück</div>
     <div id="hud">
       <div id="hud-title">Stromland</div>
       <div id="hud-values"></div>
