@@ -1,0 +1,2 @@
+ready=True shot=shots/iter2/iter2-at-1300.png
+console clean

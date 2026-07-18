@@ -73,6 +73,30 @@
   10. OG-Bild zeigt Fixture-Dusk statt Live → by design (konstanter goldene-Stunde-Hook)
   Re-Deploy via git push (Auto-Deploy über git connect). Finale Verifikation: live-check GRÜN + Visual-Suite 2× GRÜN + Features-Suite 2× GRÜN gegen https://stromland.demo.osai.solutions.
 
+## Fresh-Eyes-Fix-Iteration (2026-07-19, externe Review-Session)
+
+13 Findings (P1 1–4 kritisch, P2 5–9, P3 10–13) + 1 Bonus-Bug beim Baseline-Lauf. Alle umgesetzt:
+
+| # | Finding | Fix | Commit |
+|---|---|---|---|
+| — | Baseline rot: `/api/power` 404 um 00:52 (jenseits 45-min-Grace) | Vortags-Retry statt Zeitraterei | 190fbd2 |
+| 1 | „Offshore-Schimmerband" als messerscharfer Streifen | Echte Ursache per Pixel-Forensik: **Khaki-Talboden** (18 % Amber in valleyTop) + Becken-Rect-Kante bei hor. Distanz-Haze + Ellipsen-Becken + Kammbasen-Dunst; Glitzer auf seaClip geclippt | adf2b71 |
+| 2 | Mittag = fahle Milchsuppe statt 45-GW-Triumph | Zenit-Sättigung aus Solar×Klarheit, Gold-Wash, größere Glut, Godrays radial, Mittagslicht-Wash überm Land | 92aec10 |
+| 3 | Grain = TV-Static | Reines 2D-IGN-Korn, 1,5 CSS-px dpr-normiert, Opacity 0.10→0.05 | 5081cb5 |
+| 4 | Strichlagen-Dichte fehlt (1440px) | strokeFill auflösungs-normiert (Dichte/Fläche, Länge/Breite), Kontur-Striche, 2-seitiger Ton-Jitter, Strata-Bänder | ef55313 |
+| 5 | Totes Mittelband, harte Stufenkante | Wertetrennung hinten hell/kühl, Dunst ZWISCHEN Kämmen, dk-Gradient bis Bildrand | adf2b71 + ef55313 |
+| 6 | Windräder haarfein, Partikel zu leise | Größenvarianz + 2 Boost-Räder, dickere Masten/Blätter + Gondel, Partikel-Alpha rauf | 92aec10 |
+| 7 | Fluss nachts = dunkler Riss | Mondlicht-Glint (Silber-Sheen) + hellere Nacht-Himmelsspiegelung | 92aec10 |
+| 8 | Mobile-Intro bricht hässlich um | Eigene Kurzzeilen-Fassung < 520 px | 10328c8 |
+| 9 | Mond: Augen-Krater + Banding-Ring | Mare fast unsichtbar, Halo mit geeasten Stops | 92aec10 |
+| 10 | 4× „GPU stall due to ReadPixels" | Finish-Pass ganz ohne WebGL/mix-blend-mode → Konsole clean | 5081cb5 |
+| 11 | og.png 953 KB | og.jpg q85 = 64 KB (render-og, Metas, live-check umgestellt) | 10328c8 |
+| 12 | Tap-Ziele < 44 px | actions/overlay-close Padding ≥ 44 px, Optik bleibt Hairline | 10328c8 |
+| 13 | Galerie-Modus = Falle | Exit-Hint einmal pro Sitzung | 10328c8 |
+
+Perf nach Iteration: 60,0 fps GPU (Metal, 1600×1000, q=1) · Software 45,5 fps (q=1, über der 42er-Absenkschwelle).
+Vergleichs-Shots: `shots/iter2/` (Desktop 4 Tageszeiten + Mobile 21:15).
+
 ## Fürs Video (op-capture-Übergabe)
 
 - **Replay „Dieser Tag"** ist das Capture-Gold: `?mock=1&seed=7` + Klick auf „Dieser Tag" → 40-s-Fahrt Sonnenaufgang→Solarflut→Abendglut→Nacht mit Fortschritts-Hairline.

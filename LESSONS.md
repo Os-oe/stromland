@@ -48,6 +48,28 @@ Daten-Kunst-/Canvas-Projekte.
 - Deterministische Params (`?mock=1&at=HH:MM&seed=N`) von Anfang an einbauen —
   jede Gate-Suite, jedes OG-Bild, jeder Capture-Shot hängt daran.
 
+## Fresh-Eyes-Fix-Iteration (19.07.)
+
+- **Der Reviewer benennt das Symptom, nicht die Ursache.** „Offshore-Glitzerstreifen
+  über den Hügeln" war in Wahrheit der Talboden-Grundton (18 % Amber → Khaki-Band
+  ab exakt hor−1). Layer-Bisect (`?dbg=`) schloss die Dynamik aus, **Pixel-Forensik
+  (Zeilen-Mittelwerte, Sprung-Detektion)** fand die Kante + Farbe → Ursache in 2 Minuten.
+- **Strichdichte muss auflösungs-normiert sein**: fixe Stroke-Counts/Längen, die auf
+  1280 px dicht wirken, zerfallen auf 1440+/dpr2 zu Grieß. Dichte pro FLÄCHE skalieren
+  (Cap ~2,2×), Länge/Breite pro Bildbreite — und Repaint-Takt gegensteuern
+  (Palette-Key gröber quantisieren, coarse-Modus zeichnet 0,45×).
+- **Film-Grain: 1,5 CSS-px Kornzelle, dpr-normiert, Opacity ≤ 0,05.** 3-px-Zellen auf
+  dpr-1 lesen als TV-Static und fressen jede Strichlage. Und: WebGL-Overlay-Canvas
+  (mix-blend-mode WIE drawImage-Composite) erzeugt ohne Hardware-GL „GPU stall due to
+  ReadPixels" — vorgerenderte 2D-IGN-Kacheln + `globalCompositeOperation:'overlay'`
+  können dasselbe stallfrei auf jeder Plattform.
+- **OG-Bilder von malerischem Content als JPEG**: PNG mit Korn = 953 KB, JPEG q85 = 64 KB.
+- **Ellipsen-Glut statt Radial+fillRect am Horizont**: Rect-Kante durchs Gradient-
+  Zentrum ist dieselbe Falle wie beim Preis-Glut-Bug — Zentrum UNTER die Kante legen
+  und drüber ausbluten lassen.
+- `/public_power`-404 direkt nach Mitternacht ist NICHT mit einem festen Grace-Fenster
+  lösbar (Beobachtung: 00:52 noch leer) — auf 404 einmal mit Vortags-Mitternacht retrien.
+
 ## Vercel
 
 - `vercel alias set` meldet „no access to domain" für **Projekt-Domains** —
