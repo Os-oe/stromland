@@ -9,7 +9,7 @@
 | Phase | Gate | Status |
 |---|---|---|
 | 1 Fundament (Proxy + Datenmodell + Fixture) | 3×/api/* valide + Ausfall→Fixture, Suite 2× | ✅ PASS (2× grün) |
-| 2 MVP-Gemälde (11 Mappings + Paletten) | 4-Tageszeiten-Shots + HUD==API | — |
+| 2 MVP-Gemälde (11 Mappings + Paletten) | 4-Tageszeiten-Shots + HUD==API | ✅ PASS (2× grün) |
 | 3 Features (Replay/Galerie/Overlay/OG) | Suite 2× inkl. Replay + Mobile | — |
 | 4 Polish (Sensations-Schleife) | ≥3 Kritik-Runden + 60fps + Wand-Urteil | — |
 | 5 Ship (Deploy + Legal) | E2E live + alias + inhaltl. Live-Check | — |
@@ -39,6 +39,10 @@
 - 2026-07-18 23:2x — **Phase 1 PASS.** Fixture = Echt-Tag 2026-07-17 (97 Power-Punkte, 97 Preis-Punkte, 1801 Freq-Samples, 43 KB). Proxy-Handler power/frequency/context mit Allowlist, 8-s-Timeout, Last-Good-Cache, Fixture-Fallback. Suite `tests/suite-api.mjs` 2× grün (Live-Pass + Offline-Pass).
   - Fachbefund: `/signal.share` = EE-Anteil **an der Last** — überschreitet legitim 100 % (heute max 139,7 %). Test-Band auf 0–250 korrigiert; Info-Overlay muss das später erklären.
   - Flake-Ursachen behoben: waitUp pollte /api/* (Upstream-Hammering) → pollt jetzt Statik; Live-Checks sequentiell + 1 Retry (Upstream drosselt Bursts).
+
+- 2026-07-19 00:xx — **Phase 2 PASS.** Malerei-Engine komplett: 6 gecachte Layer (Sky-Dither/Celestial/Far/Mid/River/Fore) + Dynamik (Partikel-Flow-Field, Nebel, Fluss-Schimmer, Offshore-Flicker, Preis-Glut, Klarheits-Schleier, Atmen). Alle 11 Mappings implementiert. Gate-Suite `tests/suite-visual.py` 2× grün (HUD==API exakt, 0 Konsolen-Fehler, 6/6 Stimmungs-Paare Δ>12).
+  - Gefixte Maler-Bugs: Sky-Stops unsortiert (`0.78*horF/0.65`) · fehlender Talboden (Himmel schien durch → weißes Band) · Radial-Gradient größer als fillRect → sichtbare Schnittkante (Preis-Glut) · Schleier-Rect über Gradient-Ende hinaus · Fog-Farbe bei Dusk orange · Partikel-Respawn-Häufung links · Talboden nutzte Akzent-Stops (Neon-Balken bei Dusk).
+  - Test-Lektion: Python rundet half-even, JS Intl half-up — HUD-Vergleiche brauchen ROUND_HALF_UP.
 
 ## TODOs / Offenes
 
