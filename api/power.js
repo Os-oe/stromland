@@ -1,7 +1,7 @@
 // GET /api/power — German public net power production, today, 15-min grid.
 // Reshaped into named series; falls back to last-good cache, then to the built-in fixture.
 
-import { fetchUpstream, getLastGood, sendJson, round } from './_lib/upstream.js';
+import { fetchUpstream, getLastGood, sendJson, round, berlinDayStart } from './_lib/upstream.js';
 import fixture from './_lib/fixture-data.js';
 
 const CACHE = 's-maxage=120, stale-while-revalidate=300';
@@ -37,8 +37,13 @@ function reshape(raw) {
 
 export default async function handler(req, res) {
   try {
-    const raw = await fetchUpstream('/public_power', { country: 'de' }, 'power');
-    sendJson(res, 200, { source: 'live', updated: Math.floor(Date.now() / 1000), ...reshape(raw) }, CACHE);
+    // Immer expliziter Bereich: Berlin-Mitternacht → jetzt. Ohne Range defaultet der
+    // Upstream auf "heute" und liefert direkt nach Mitternacht 404 (leerer Tag).
+    const start = berlinDayStart();
+    const end = Math.floor(Date.now() / 1000);
+    const raw = await fetchUpstream('/public_power', { country: 'de', start, end }, 'power');
+    if (!raw?.unix_seconds?.length) throw new Error('empty power payload');
+    sendJson(res, 200, { source: 'live', updated: end, ...reshape(raw) }, CACHE);
   } catch (e) {
     console.error('power upstream failed:', String(e && e.message || e));
     const cached = getLastGood('power');

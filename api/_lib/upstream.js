@@ -38,3 +38,21 @@ export function sendJson(res, status, body, cacheControl) {
 }
 
 export const round = (x, d = 1) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** d);
+
+// Unix-Sekunden der letzten Mitternacht Europe/Berlin.
+// Direkt nach Mitternacht (< graceMin) hat der neue Tag upstream noch keine
+// Datenpunkte (404 „no content") → dann die Mitternacht DAVOR nehmen.
+export function berlinDayStart(graceMin = 45) {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(now).map((p) => [p.type, p.value]));
+  const minutesSinceMidnight = Number(parts.hour) * 60 + Number(parts.minute);
+  // UTC-Timestamp von "heute 00:00 Berlin": jetzige Berlin-Uhrzeit von jetzt abziehen
+  const sec = Math.floor(now.getTime() / 1000)
+    - minutesSinceMidnight * 60 - now.getUTCSeconds();
+  if (minutesSinceMidnight < graceMin) return sec - 86400;
+  return sec;
+}
