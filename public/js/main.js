@@ -51,6 +51,7 @@ function loop(t) {
   const dt = t - last;
   last = t;
   tuneQuality(dt);
+  tickReplay(t);
 
   // Snapshot-Takt: 1×/s reicht (15-min-Daten), Replay setzt öfter
   if (!snap || t - lastSnapAt > 1000 || data.replayOffsetMin != null) {
@@ -71,14 +72,81 @@ function loop(t) {
   stage.style.filter = `brightness(${(1 + breathe).toFixed(4)}) saturate(${sat.toFixed(3)})`;
   finish.render(t, unrest);
 
-  if (t - lastHudAt > 1000) {
+  if (t - lastHudAt > (replay ? 120 : 1000)) {
     hud.update(snap, freq);
     lastHudAt = t;
   }
 }
 
+// ---------- Features: Replay · Galerie · Info-Overlay ----------
+const REPLAY_MS = 40000;
+let replay = null; // {t0}
+
+function replayMaxMinutes() {
+  const ts = data.power?.unix_seconds;
+  if (!ts?.length) return 1440;
+  return Math.max(60, Math.min(1439, (ts[ts.length - 1] - ts[0]) / 60));
+}
+
+function startReplay() {
+  replay = { t0: performance.now() };
+  painter.coarse = true;
+  document.body.classList.add('replaying');
+  document.getElementById('btn-replay').textContent = 'Jetzt';
+}
+
+function stopReplay() {
+  replay = null;
+  data.replayOffsetMin = null;
+  painter.coarse = false;
+  document.body.classList.remove('replaying');
+  document.getElementById('btn-replay').textContent = 'Dieser Tag';
+}
+
+function tickReplay(t) {
+  if (!replay) return;
+  const prog = (t - replay.t0) / REPLAY_MS;
+  if (prog >= 1) { stopReplay(); return; }
+  // sanfte Beschleunigung am Anfang/Ende
+  const e = prog < 0.5 ? 2 * prog * prog : 1 - Math.pow(-2 * prog + 2, 2) / 2;
+  data.replayOffsetMin = e * replayMaxMinutes();
+}
+
+const overlay = document.getElementById('overlay');
+function openOverlay() { overlay.classList.add('open'); }
+function closeOverlay() { overlay.classList.remove('open'); }
+
+function wireUI() {
+  document.getElementById('btn-replay').addEventListener('click', (e) => {
+    e.stopPropagation();
+    replay ? stopReplay() : startReplay();
+  });
+  document.getElementById('btn-info').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openOverlay();
+  });
+  document.getElementById('overlay-close').addEventListener('click', closeOverlay);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
+  // Galerie-Modus: Tap/Klick aufs Bild blendet ALLES aus
+  canvas.addEventListener('click', () => {
+    if (overlay.classList.contains('open')) return;
+    document.body.classList.toggle('gallery');
+  });
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeOverlay(); document.body.classList.remove('gallery'); }
+    if (e.key === 'g') document.body.classList.toggle('gallery');
+    if (e.key === 'r') replay ? stopReplay() : startReplay();
+    if (e.key === 'i') overlay.classList.contains('open') ? closeOverlay() : openOverlay();
+  });
+}
+
+window.__stromland.startReplay = startReplay;
+window.__stromland.stopReplay = stopReplay;
+window.__stromland.isReplaying = () => replay != null;
+
 async function boot() {
   resize();
+  wireUI();
   try {
     await data.load();
   } catch (e) {

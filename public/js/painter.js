@@ -215,7 +215,11 @@ export class Painter {
   }
 
   // ---------- Statische Layer ----------
-  key(...vals) { return vals.map((v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v)).join('|'); }
+  // coarse=true (Replay): gröbere Quantisierung → weniger Layer-Neuzeichnungen
+  key(...vals) {
+    const q = this.coarse ? 25 : 100;
+    return vals.map((v) => (typeof v === 'number' ? Math.round(v * q) / q : v)).join('|');
+  }
 
   ensureLayers() {
     const n = this.norm, s = this.snap, p = this.paletteMix;

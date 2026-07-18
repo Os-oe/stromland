@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stromland — ein lebendes Landschaftsgemälde des deutschen Stromnetzes</title>
 <meta name="description" content="Der deutsche Strommix malt in Echtzeit ein Landschaftsgemälde: Solar wird Licht, Wind wird Bewegung, das Netz atmet mit 50 Hertz. Daten: energy-charts.info (Fraunhofer ISE).">
+<link rel="canonical" href="https://stromland.demo.osai.solutions/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Stromland — das deutsche Stromnetz malt ein Bild">
+<meta property="og:description" content="Ein lebendes Landschaftsgemälde, gemalt vom deutschen Strommix in Echtzeit. Nachts schläft es, an Sturmtagen tobt es — und es atmet mit der Netzfrequenz.">
+<meta property="og:url" content="https://stromland.demo.osai.solutions/">
+<meta property="og:image" content="https://stromland.demo.osai.solutions/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Stromland — das deutsche Stromnetz malt ein Bild">
+<meta name="twitter:description" content="Ein lebendes Landschaftsgemälde, gemalt vom deutschen Strommix in Echtzeit.">
+<meta name="twitter:image" content="https://stromland.demo.osai.solutions/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23141852'/%3E%3Cpath d='M0 19 Q8 15 16 18 T32 17 V32 H0 Z' fill='%232B2F77'/%3E%3Cpath d='M0 24 Q10 21 18 23.5 T32 23 V32 H0 Z' fill='%230a0e26'/%3E%3Ccircle cx='22' cy='9' r='3.4' fill='%23ffb03b'/%3E%3C/svg%3E">
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -47,6 +61,73 @@
     opacity: 0.66;
     font-variant: small-caps;
   }
+  /* Hairline-Aktionen oben rechts — kein Panel, keine Icons-Sammlung */
+  #actions {
+    position: absolute;
+    top: max(16px, env(safe-area-inset-top, 0px) + 10px);
+    right: 20px;
+    display: flex; gap: 1.6em;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(11px, 1.2vw, 13.5px);
+    letter-spacing: 0.18em;
+    opacity: 0.4; transition: opacity 0.5s ease;
+    z-index: 5;
+  }
+  #actions:hover { opacity: 1; }
+  #actions button {
+    all: unset; cursor: pointer; color: #efe9dc;
+    text-shadow: 0 1px 8px rgba(10, 8, 14, 0.55);
+    padding: 6px 2px; /* Tap-Ziel */
+  }
+  #actions button:focus-visible { outline: 1px solid rgba(239,233,220,0.5); outline-offset: 3px; }
+  body.gallery #hud, body.gallery #actions { opacity: 0 !important; pointer-events: none; }
+  body.replaying #btn-replay { opacity: 1; }
+
+  /* Info-Overlay „Wie lese ich dieses Bild?" */
+  #overlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(10, 8, 14, 0.78);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: none; overflow-y: auto;
+    color: #efe9dc;
+  }
+  #overlay.open { display: block; }
+  #overlay .inner {
+    max-width: 620px; margin: 0 auto;
+    padding: clamp(28px, 6vh, 64px) 26px calc(40px + env(safe-area-inset-bottom, 0px));
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  #overlay h2 {
+    font-weight: 400; font-size: clamp(20px, 3vw, 27px);
+    letter-spacing: 0.12em; margin-bottom: 0.4em;
+  }
+  #overlay .lead {
+    font-size: clamp(13.5px, 1.6vw, 15.5px); line-height: 1.75;
+    opacity: 0.85; margin-bottom: 1.8em; font-style: italic;
+  }
+  #overlay dl { margin: 0 0 2em; }
+  #overlay dt {
+    font-size: clamp(12.5px, 1.4vw, 14px); letter-spacing: 0.14em;
+    margin-top: 1.15em; opacity: 0.95;
+  }
+  #overlay dd {
+    font-size: clamp(12.5px, 1.4vw, 14px); line-height: 1.6;
+    opacity: 0.62; margin-top: 0.2em;
+  }
+  #overlay .foot {
+    border-top: 1px solid rgba(239,233,220,0.18); padding-top: 1.4em;
+    font-size: clamp(11px, 1.2vw, 12.5px); line-height: 1.9; opacity: 0.62;
+  }
+  #overlay .foot a { color: #efe9dc; }
+  #overlay .brand { display: flex; align-items: center; gap: 10px; margin-top: 1.1em; opacity: 0.85; }
+  #overlay .brand img { width: 22px; height: 22px; border-radius: 5px; }
+  #overlay-close {
+    all: unset; cursor: pointer; position: absolute;
+    top: max(14px, env(safe-area-inset-top, 0px) + 8px); right: 22px;
+    font-family: Georgia, serif; font-size: 26px; line-height: 1;
+    color: #efe9dc; opacity: 0.6; padding: 8px;
+  }
+  #overlay-close:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -56,6 +137,62 @@
       <div id="hud-title">Stromland</div>
       <div id="hud-values"></div>
       <div id="hud-archive" style="display:none"></div>
+    </div>
+    <nav id="actions" aria-label="Aktionen">
+      <button id="btn-replay" title="Den heutigen Tag in 40 Sekunden erleben">Dieser Tag</button>
+      <button id="btn-info" title="Wie lese ich dieses Bild?">Legende</button>
+    </nav>
+  </div>
+
+  <div id="overlay" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+    <button id="overlay-close" aria-label="Schließen">×</button>
+    <div class="inner">
+      <h2 id="overlay-title">Wie lese ich dieses Bild?</h2>
+      <p class="lead">Dieses Gemälde malt sich selbst — aus dem, was das deutsche Stromnetz
+        in diesem Moment tut. Nichts hier ist Dekoration: Jede Bewegung, jedes Licht,
+        jeder Dunst ist eine Messung.</p>
+      <dl>
+        <dt>Das Sonnenlicht</dt>
+        <dd>ist die Solarleistung. Je mehr Solarstrom fließt, desto goldener glüht der Himmel.
+          Nachts, wenn alle Module schlafen, wachen Mond und Sterne auf.</dd>
+        <dt>Der Wind in der Luft</dt>
+        <dd>sind die Windräder an Land: Tausende Luftfäden ziehen durchs Bild, und die
+          kleinen Silhouetten am Hang drehen sich so schnell, wie Deutschland gerade Wind erntet.</dd>
+        <dt>Das Schimmerband am Horizont</dt>
+        <dd>ist die See — es glitzert mit der Leistung der Windparks draußen im Meer.</dd>
+        <dt>Die dunklen Bergkämme</dt>
+        <dd>sind Kohle, Gas und Öl. Je mehr fossile Kraftwerke laufen, desto schwerer und
+          dunkler türmen sie sich auf, und Rauchschleier legen sich dahinter.</dd>
+        <dt>Der Pflanzenwuchs an den Hängen</dt>
+        <dd>ist die Biomasse — still, stetig, grün.</dd>
+        <dt>Der Fluss</dt>
+        <dd>ist die Wasserkraft: Er wird breiter und glänzender, je mehr Turbinen er antreibt.
+          Und wenn die Pumpspeicher Strom schlucken, fließt sein Glitzern rückwärts — Wasser bergauf.</dd>
+        <dt>Die Amber-Glut</dt>
+        <dd>ist der Börsenstrompreis — der einzige grelle Farbton im ganzen Bild.
+          Teurer Strom: Die Glut am Horizont und im Fluss flackert auf.</dd>
+        <dt>Die Klarheit der Luft</dt>
+        <dd>ist der Anteil der Erneuerbaren an der Stromnachfrage. Hoher Anteil: klare Luft.
+          Niedriger Anteil: Ein fahler Schleier legt sich über die Landschaft.
+          (Er kann über 100 % liegen — dann erzeugt Deutschland mehr Ökostrom, als es verbraucht.)</dd>
+        <dt>Das Atmen des Bildes</dt>
+        <dd>ist die Netzfrequenz, sekundengenau gemessen: Um 50,000 Hertz atmet das Gemälde
+          ruhig. Weicht das Netz ab, wird der Nebel unruhig.</dd>
+        <dt>Die Tageszeit</dt>
+        <dd>ist echt: Morgens dämmert es hier, mittags steht die Sonne hoch, nachts schläft
+          das Land. Morgen früh sieht dieses Bild völlig anders aus.</dd>
+      </dl>
+      <div class="foot">
+        Daten: <a href="https://energy-charts.info" target="_blank" rel="noopener">energy-charts.info</a>
+        (Fraunhofer ISE), <a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>
+        · Netzfrequenz gemessen am Fraunhofer ISE<br>
+        Tippen/Klicken aufs Bild: Galerie-Modus · „Dieser Tag": der heutige Tag in 40 Sekunden<br>
+        <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a>
+        <div class="brand">
+          <img src="/logo-mark.png" alt="OsAI" width="22" height="22">
+          <span>Ein Kunstwerk von OsAI — osai.solutions</span>
+        </div>
+      </div>
     </div>
   </div>
   <script type="module" src="/js/main.js"></script>
