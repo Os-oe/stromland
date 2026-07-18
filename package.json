@@ -1,0 +1,12 @@
+{
+  "name": "stromland",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ein lebendes Landschaftsgemälde, gemalt vom deutschen Stromnetz — in Echtzeit.",
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "record-fixture": "node scripts/record-fixture.mjs",
+    "test:api": "node tests/suite-api.mjs"
+  }
+}
