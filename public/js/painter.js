@@ -292,10 +292,29 @@ export class Painter {
     // klare Luft drückt auch den Weißschleier überm Horizont zusammen — der Dunst
     // bleibt (ehrlich), aber er frisst nicht mehr die halbe Himmelshöhe
     const midSky = mix(p[2], mix(p[1], deepZen, 0.30), clamp01(zenBoost) * 0.62);
+    // Triumph-Stunde: hohe UND starke Sonne bei klarer Luft staucht das Dunstband —
+    // Blau hält tiefer hinab, der Übergang wird färbig (Warmblau → Hellgold), Weiß
+    // bleibt ein schmaler Saum direkt am Horizont. tri==0 außerhalb des Mittags
+    // (wDay·high·solar·clarity) → Dawn/Dusk/Nacht pixelidentisch.
+    const high = smooth(8, 30, this.snap.sunElev);
+    const tri = this.paletteMix.weights.wDay * high * nrm.solar * (0.35 + 0.65 * nrm.clarity);
+    const zen1T = mix(zen1, mix(p[1], deepZen, 0.60), tri * 0.6);
+    const midSkyT = mix(midSky, mix(mix(p[1], deepZen, 0.50), [255, 226, 172], 0.32), tri * 0.95);
+    const x1 = lerp(0.14, 0.19, tri) * horF;
+    const x2 = lerp(0.46, 0.63, tri) * horF;
+    const x3 = lerp(0.82, 0.90, tri) * horF;
     const stops = [
       // Zenit hält seinen Ton bis 14 % — satterer Himmel oben, mehr Tiefe am Tag
-      [0.0, zen0], [0.14 * horF, zen0], [0.46 * horF, zen1], [0.82 * horF, midSky], [horF, p[3]], [1, p[3]],
+      [0.0, zen0], [x1, zen0], [x2, zen1T], [x3, midSkyT], [horF, p[3]], [1, p[3]],
     ];
+    if (tri > 0.02) {
+      // Hellgold-Saum kurz überm Horizont — Farbe kontinuierlich aus der natürlichen
+      // Interpolation entwickelt (kein Pop, wenn tri die Schwelle quert)
+      const q = 0.962 * horF;
+      const f = clamp01((q - x3) / Math.max(1e-6, horF - x3));
+      const ss = f * f * (3 - 2 * f);
+      stops.splice(4, 0, [q, mix(mix(midSkyT, p[3], ss), [255, 238, 192], 0.52 * tri)]);
+    }
     const rowColor = (fy) => {
       let i = 0;
       while (i < stops.length - 2 && fy > stops[i + 1][0]) i++;
@@ -369,11 +388,22 @@ export class Painter {
         ctx.fillRect(0, 0, w, h);
       }
       // heller Kern (nie harte Scheibe: Gradient bis 0) + weiche Höfe — Radius
-      // wächst mit der Solarleistung
+      // wächst mit der Solarleistung. Mittags-Triumph (hohe Sonne × Solar): Kern
+      // heller/etwas größer/dichter, innerer Hof wärmer — „man blinzelt", keine Scheibe.
+      const coreBoost = high * n.solar;
       const rScale = 1 + 0.5 * n.solar * (0.4 + 0.6 * high);
-      for (const [rad, al, col] of [[0.022, 1.15, core], [0.06, 0.78, glow], [0.15, 0.46, glow], [0.38, 0.20, glow]]) {
+      const hot = mix(core, [255, 251, 236], 0.68 * coreBoost);
+      const hofC = mix(glow, [255, 216, 150], 0.38 * coreBoost);
+      for (const [rad, al, col, dense] of [
+        [0.022 * (1 + 0.55 * coreBoost), 1.15 + 0.5 * coreBoost, hot, 1],
+        [0.06 * (1 + 0.25 * coreBoost), 0.78 + 0.24 * coreBoost, hofC, 0.6],
+        [0.15, 0.46, glow, 0], [0.38, 0.20, glow, 0]]) {
         const g = ctx.createRadialGradient(sp.x, coreY, 0, sp.x, coreY, w * rad * rScale);
-        g.addColorStop(0, rgba(col, Math.min(1, al * intensity)));
+        const a0 = Math.min(1, al * intensity);
+        g.addColorStop(0, rgba(col, a0));
+        // dichterer Abfall nur bei Triumph: Stop bei 0.32 startet exakt auf der
+        // linearen Rampe (0.68·a0) und hebt sich kontinuierlich mit coreBoost
+        if (dense * coreBoost > 0.02) g.addColorStop(0.32, rgba(col, a0 * Math.min(1, 0.68 + 0.24 * dense * coreBoost)));
         g.addColorStop(1, rgba(col, 0));
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
@@ -595,11 +625,14 @@ export class Painter {
     // Himmelslicht-Reflex) und wird nach vorn dunkler und wärmer — atmosphärische
     // Perspektive. Kein Amber im Grundton (Khaki-Band-Bug), keine harte Kante bei hor.
     const wDayVal = this.paletteMix.weights.wDay;
+    // Mittagslicht-Gewicht: hohe starke Sonne — 0 außerhalb des Mittags
+    const noon = wDayVal * (n.solar ?? 0) * smooth(10, 32, this.snap.sunElev);
     // vor Sonnenaufgang/nachts liegt das Land fast in Silhouette
     const duskDark = 0.30 * (1 - wDayVal);
     const hazeC = mix(mix(p[2], p[3], 0.5), p[5], 0.22);
-    const valleyTop = mix(mix(p[5], p[2], 0.24), BLACK_C, duskDark * 0.8);
-    const valleyBot = mix(mix(p[6], BLACK_C, 0.15), BLACK_C, duskDark);
+    // mittags goldgrün gelüftet (besonntes Tal), sonst identisch (noon==0)
+    const valleyTop = mix(mix(mix(p[5], p[2], 0.24), BLACK_C, duskDark * 0.8), [206, 206, 150], 0.20 * noon);
+    const valleyBot = mix(mix(mix(p[6], BLACK_C, 0.15), BLACK_C, duskDark), [170, 176, 122], 0.08 * noon);
     const vg = ctx.createLinearGradient(0, hor, 0, h);
     vg.addColorStop(0, rgba(mix(hazeC, valleyTop, 0.25), 1));
     vg.addColorStop(0.09, rgba(mix(hazeC, valleyTop, 0.62), 1));
@@ -634,10 +667,11 @@ export class Painter {
       ctx.fillStyle = dk;
       ctx.fillRect(0, hor + h * 0.04, w, h - hor - h * 0.04);
     }
-    // Strichtextur über den Talboden (bricht die Fläche) — horizontale Lagen
+    // Strichtextur über den Talboden (bricht die Fläche) — horizontale Lagen;
+    // mittags goldgrün angehoben (besonnter Talboden)
     this.strokeFill(ctx, [[0, hor - 1], [w, hor - 1]], h + 2, valleyTop, {
-      count: 1700, seed: 555, alpha: 0.09, len: 14, angle: -0.04, lightAmt: 0.35,
-      light: mix(valleyTop, p[3], 0.6), shade: mix(valleyTop, BLACK_C, 0.4),
+      count: 1700, seed: 555, alpha: 0.09 + 0.04 * noon, len: 14, angle: -0.04, lightAmt: 0.35 + 0.20 * noon,
+      light: mix(mix(valleyTop, p[3], 0.6), [242, 232, 158], 0.35 * noon), shade: mix(valleyTop, BLACK_C, 0.4),
     });
 
     const sizeF = Math.max(0.85, w / 1500);
@@ -668,13 +702,17 @@ export class Painter {
       // Wertetrennung: hinten hell/kühl (Fernlicht-Haze), vorn dunkler/wärmer
       const atmo = mix(hazeC, p[3], 0.12);
       const tone = mix(
-        mix(mix(p[5], p[6], 0.22 + k * 0.26), atmo, r.depth * 0.62),
-        BLACK_C, (0.10 + 0.08 * k) * (1 - dayW));
+        mix(
+          mix(mix(p[5], p[6], 0.22 + k * 0.26), atmo, r.depth * 0.62),
+          BLACK_C, (0.10 + 0.08 * k) * (1 - dayW)),
+        [196, 200, 142], (0.05 + 0.04 * k) * noon); // vorn wärmer als hinten (Luftperspektive)
       const sunLitR = dayW * (n.solar ?? 0);
+      // Mittagslicht: hohe starke Sonne hebt die Strichlagen goldgrün an — das Land
+      // liest „besonnt" statt kühl-diesig. noon==0 außerhalb des Mittags.
       this.strokeFill(ctx, r.pts, bottom, tone, {
-        count: 2800, seed: 200 + k, alpha: 0.15, len: 10 + k * 3, angle: -0.10,
-        lightAmt: 0.22 + 0.3 * dayW + 0.22 * sunLitR, // nachts kaum Lichtstriche — keine Speckles
-        light: mix(mix(tone, p[4], 0.3 + 0.25 * dayW), [250, 240, 210], 0.25 * sunLitR),
+        count: 2800, seed: 200 + k, alpha: 0.15 + 0.05 * noon, len: 10 + k * 3, angle: -0.10,
+        lightAmt: 0.22 + 0.3 * dayW + 0.22 * sunLitR + 0.24 * noon, // nachts kaum Lichtstriche — keine Speckles
+        light: mix(mix(mix(tone, p[4], 0.3 + 0.25 * dayW), [250, 240, 210], 0.25 * sunLitR), [242, 232, 158], 0.62 * noon),
         shade: mix(tone, BLACK_C, 0.5),
       });
 
@@ -711,13 +749,13 @@ export class Painter {
     // Mittagslicht ÜBER dem Land: hohe Sonne + viel Solar = die Landschaft liegt
     // wirklich in der Sonne (warmer, transluzenter Wash — Striche bleiben sichtbar)
     {
-      const sunWash = this.paletteMix.weights.wDay * (n.solar ?? 0) * smooth(10, 32, this.snap.sunElev);
+      const sunWash = noon;
       if (sunWash > 0.04) {
-        const warmL = [252, 244, 214];
+        const warmL = [253, 242, 200];
         const gWash = ctx.createLinearGradient(0, hor, 0, h);
-        gWash.addColorStop(0, rgba(warmL, 0.17 * sunWash));
-        gWash.addColorStop(0.5, rgba(warmL, 0.10 * sunWash));
-        gWash.addColorStop(1, rgba(warmL, 0.02 * sunWash));
+        gWash.addColorStop(0, rgba(warmL, 0.30 * sunWash));
+        gWash.addColorStop(0.5, rgba(warmL, 0.14 * sunWash));
+        gWash.addColorStop(1, rgba(warmL, 0.03 * sunWash));
         ctx.fillStyle = gWash;
         ctx.fillRect(0, hor - 1, w, h - hor + 2);
       }
@@ -866,8 +904,12 @@ export class Painter {
     // Klarheits-Schleier VOR dem Vordergrund: Dunst gehört in die Distanz
     const smogEarly = 1 - n.clarity;
     if (smogEarly > 0.05 && !DBG.has('noveil')) {
-      // nachts dunklerer Dunst — Schleier hellt die Nacht nicht künstlich auf
-      const veilC = mix(mix(mix(p[2], [128, 120, 110], 0.5), p[5], 0.3), BLACK_C, 0.35 * (1 - p.weights.wDay));
+      // nachts dunklerer Dunst — Schleier hellt die Nacht nicht künstlich auf;
+      // mittags warm durchleuchtet (Sonnendunst statt Grauband), noon==0 sonst
+      const noonV = p.weights.wDay * n.solar * smooth(10, 32, s.sunElev);
+      const veilC = mix(
+        mix(mix(mix(p[2], [128, 120, 110], 0.5), p[5], 0.3), BLACK_C, 0.35 * (1 - p.weights.wDay)),
+        [232, 218, 172], 0.40 * noonV);
       const y0 = hor - h * 0.3, y1 = hor + h * 0.14;
       const g = ctx.createLinearGradient(0, y0, 0, y1);
       g.addColorStop(0, rgba(veilC, 0));

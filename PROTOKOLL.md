@@ -111,6 +111,34 @@ Zenit-Blau, triumphale Sonne, sonnenbeschienenes strukturiertes Land) — ehrlic
 er das schwächste der vier Einzelbilder, aber erstmals eines, das ich zeigen würde,
 nicht nur ertragen.
 
+## Mittags-Triumph-Iteration (2026-07-19, Fix-Session)
+
+Ziel: 13:00 (Solar 45,1 GW + EE 78 %) von „milchig" zur Triumph-Stunde — andere
+Tageszeiten unverändert. 4 Runden mit Screenshot-Selbstkritik, nur `painter.js`:
+
+1. **Milchband** — `paintSky()`: Triumph-Faktor `tri = wDay·high·solar·(0.35+0.65·clarity)`
+   moduliert Stop-Positionen (Blau hält bis ~0.63·horF hinab, Dunstband auf das
+   letzte Zehntel gestaucht) und färbt die mittleren Stops warmblau→hellgold
+   (`zen1T`/`midSkyT` + Hellgold-Saum-Stop bei 0.962·horF, kontinuierlich aus der
+   natürlichen Interpolation — kein Pop an der tri-Schwelle). Klarheits-Schleier
+   mittags warm durchleuchtet statt Grauband.
+2. **Sonne** — `paintCelestial()`: `coreBoost = high·solar` macht den Kern heller/
+   größer/dichter (zusätzlicher Gradient-Stop bei 0.32, startet exakt auf der
+   linearen Rampe) + wärmerer innerer Hof — „man blinzelt", keine harte Scheibe.
+3. **Land** — `paintMid()`: `noon = wDay·solar·smooth(10,32,sunElev)` hebt
+   Talboden-Basiston, Kamm-Töne (vorn stärker als hinten — Luftperspektive) und
+   Strichlagen-Highlights goldgrün an ([242,232,158]-Richtung); Sonnen-Wash überm
+   Land kräftiger. Basis-PALETTES unangetastet — reine Daten-Modulation.
+
+Gates: alle Faktoren ==0 bei wDay==0 oder high==0 → 05:30/21:15/01:00 pixelidentisch
+(MAD vs. iter2-Referenzen 3,0–4,1 bei Run-zu-Run-Rauschen 3,0; 13:00 Δ=12,0 wie
+beabsichtigt). `suite-visual.py` 2× GRÜN, `suite-features.py` GRÜN. Shots: `shots/iter3/`.
+
+**Urteil 13:00:** erstmals ein eigenständiges Bild — sattes Blau bis tief hinab,
+präsente Blinzel-Sonne, besonntes goldgrünes Land; das Dunstband ist ein schmaler,
+warmer Saum. Ehrlich: im Vergleich zu Dusk/Nacht bleibt es das leiseste der vier
+Bilder, aber es liest jetzt als Triumph, nicht als Milch.
+
 ## Fürs Video (op-capture-Übergabe)
 
 - **Replay „Dieser Tag"** ist das Capture-Gold: `?mock=1&seed=7` + Klick auf „Dieser Tag" → 40-s-Fahrt Sonnenaufgang→Solarflut→Abendglut→Nacht mit Fortschritts-Hairline.
