@@ -197,6 +197,30 @@ außerhalb 49,5–50,5 Hz (Suite-Flake) → Proxy filtert unsinnige Samples
 Zenit-Zeilenmittel exakt identisch. Perf: GPU 60 fps @ q=1 · Intro ~47 fps
 (adaptiv) · Software 43–46 fps @ q=0.85 · Mobile 60 fps.
 
+**Live-Befunde nach Deploy (der Live-Check zahlt sich aus):**
+1. Nach Intro-Abbruch blieb die Szene bis zu 2 s auf dem Fahrt-Moment stehen
+   (Snapshot-/HUD-Takt je 1 s) → `forceRefresh()` bei Abbruch/Settle/Replay-Ende;
+   Suite prüft jetzt „Szene zeigt nach Abbruch sofort das Jetzt".
+2. Settle-Hint-Check flakte gegen Live bei Netz-Latenz (fixe 14,5-s-Probe traf
+   nach dem 3,8-s-Hint-Fenster) → Test pollt aufs Intro-Ende, Hook `_introEnd`.
+
+**Finale Verifikation (20.07.):** lokal am Endstand alle 4 Suiten 2× GRÜN ·
+live-check GRÜN (Intro läuft auf der Domain, Uhr wandert, Klick-Abbruch, danach
+HUD == Live-API, 0 Konsolen-Fehler) · `suite-liveliness` GRÜN gegen Live
+(Motion-Gate: 01:00 sky 1,23 / mid 0,56 / river 0,78 · 13:00 sky 0,29 / mid
+0,48 / river 0,56 — alle deutlich über Schwelle) · `suite-visual` + 
+`suite-features` GRÜN gegen Live.
+
+**Ehrliches Urteil „wirkt es jetzt lebendig, wenn man nachts 20 s draufschaut?":**
+Ja. Nachts sieht man jetzt in den ersten 5 Sekunden: Windfäden in drei Tempi
+über den ganzen Himmel, driftende Nebelbänke, Mond-Glitzer, der den Fluss
+hinabwandert, einzeln funkelnde Sterne, alle 3 s den synchronen roten Blitz der
+Windrad-Warnlichter — und im HUD schreibt sich die Netzfrequenz sichtbar weiter.
+Dazu erzählt die Intro-Tagesfahrt beim Öffnen erst einmal, WAS das Bild ist.
+Der Frame-Vergleich (iter4-night-frameA/B) unterscheidet sich mit bloßem Auge.
+Grenze der Ehrlichkeit: bei 2 GW Wind bleibt der Mittags-Himmel das ruhigste
+Element — gewollt, das Bild lügt nicht über Flaute.
+
 ## Fürs Video (op-capture-Übergabe)
 
 - **Replay „Dieser Tag"** ist das Capture-Gold: `?mock=1&seed=7` + Klick auf „Dieser Tag" → 40-s-Fahrt Sonnenaufgang→Solarflut→Abendglut→Nacht mit Fortschritts-Hairline.
