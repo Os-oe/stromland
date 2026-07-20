@@ -1,5 +1,7 @@
-// GET /api/power — German public net power production, today, 15-min grid.
+// GET /api/power — German public net power production, yesterday 00:00 → now, 15-min grid.
 // Reshaped into named series; falls back to last-good cache, then to the built-in fixture.
+// Fenster inkl. Vortag: die Intro-Tagesfahrt (gestern-Morgengrauen → jetzt) braucht
+// echte Gestern-Daten, und der Nach-Mitternacht-404 (leerer neuer Tag) entfällt damit.
 
 import { fetchUpstream, getLastGood, sendJson, round, berlinDayStart } from './_lib/upstream.js';
 import fixture from './_lib/fixture-data.js';
@@ -37,18 +39,17 @@ function reshape(raw) {
 
 export default async function handler(req, res) {
   try {
-    // Immer expliziter Bereich: Berlin-Mitternacht → jetzt. Ohne Range defaultet der
-    // Upstream auf "heute" und liefert direkt nach Mitternacht 404 (leerer Tag).
+    // Immer expliziter Bereich: Vortags-Mitternacht (Berlin) → jetzt. Ohne Range
+    // defaultet der Upstream auf "heute" und liefert direkt nach Mitternacht 404
+    // (leerer Tag) — mit dem Vortag im Fenster gibt es immer Datenpunkte.
     const end = Math.floor(Date.now() / 1000);
     let raw;
     try {
-      raw = await fetchUpstream('/public_power', { country: 'de', start: berlinDayStart(), end }, 'power');
+      raw = await fetchUpstream('/public_power', { country: 'de', start: berlinDayStart() - 86400, end }, 'power');
       if (!raw?.unix_seconds?.length) throw new Error('empty power payload');
     } catch (eToday) {
-      // Der neue Berlin-Tag kann auch JENSEITS des Grace-Fensters noch leer sein
-      // (Beobachtung: 00:52 → Upstream-404). Kein Zeit-Raten: einmal mit
-      // Vortags-Mitternacht retrien — Replay bleibt sinnvoll, Werte sind aktuell.
-      raw = await fetchUpstream('/public_power', { country: 'de', start: berlinDayStart() - 86400, end }, 'power');
+      // Sicherheitsnetz gegen Upstream-Kanten: einmal einen Tag weiter zurück retrien.
+      raw = await fetchUpstream('/public_power', { country: 'de', start: berlinDayStart() - 2 * 86400, end }, 'power');
       if (!raw?.unix_seconds?.length) throw new Error('empty power payload (retry)');
     }
     sendJson(res, 200, { source: 'live', updated: end, ...reshape(raw) }, CACHE);

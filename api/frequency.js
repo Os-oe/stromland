@@ -8,17 +8,30 @@ import fixture from './_lib/fixture-data.js';
 const CACHE = 's-maxage=10, stale-while-revalidate=30';
 const WINDOW_S = 15 * 60;
 
+// Upstream liefert vereinzelt Mess-Artefakte (0en/Ausreißer). Das deutsche Netz
+// verlässt 49,5–50,5 Hz real nie (Lastabwurf beginnt bei 49,0) — alles außerhalb
+// ist Sensorik, kein Netz. Rausfiltern hält Bild (Atmung!) und Tests sauber.
+function sane(unix, data) {
+  const u = [], d = [];
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (v != null && v > 49.5 && v < 50.5) { u.push(unix[i]); d.push(v); }
+  }
+  return { unix_seconds: u, data: d };
+}
+
 export default async function handler(req, res) {
   const end = Math.floor(Date.now() / 1000);
   const start = end - WINDOW_S;
   try {
     const raw = await fetchUpstream('/frequency', { region: 'DE-Freiburg', start, end }, 'frequency');
     if (!Array.isArray(raw.data) || raw.data.length < 10) throw new Error('too few samples');
+    const clean = sane(raw.unix_seconds, raw.data);
+    if (clean.data.length < 10) throw new Error('too few sane samples');
     sendJson(res, 200, {
       source: 'live',
       updated: end,
-      unix_seconds: raw.unix_seconds,
-      data: raw.data,
+      ...clean,
     }, CACHE);
   } catch {
     const cached = getLastGood('frequency');
@@ -26,8 +39,7 @@ export default async function handler(req, res) {
       sendJson(res, 200, {
         source: 'cache',
         updated: Math.floor(cached.ts / 1000),
-        unix_seconds: cached.data.unix_seconds,
-        data: cached.data.data,
+        ...sane(cached.data.unix_seconds, cached.data.data),
       }, CACHE);
       return;
     }

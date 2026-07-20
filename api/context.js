@@ -1,6 +1,6 @@
 // GET /api/context — bundles /signal (renewable share) + /price (day-ahead spot) in one call.
 
-import { fetchUpstream, getLastGood, sendJson, round } from './_lib/upstream.js';
+import { fetchUpstream, getLastGood, sendJson, round, berlinDayStart } from './_lib/upstream.js';
 import fixture from './_lib/fixture-data.js';
 
 const CACHE = 's-maxage=300, stale-while-revalidate=600';
@@ -19,9 +19,10 @@ function fixtureShare() {
 }
 
 export default async function handler(req, res) {
+  // Preis mit Vortag im Fenster (Intro-Tagesfahrt); /signal kennt kein start/end.
   const results = await Promise.allSettled([
     fetchUpstream('/signal', { country: 'de' }, 'signal'),
-    fetchUpstream('/price', { bzn: 'DE-LU' }, 'price'),
+    fetchUpstream('/price', { bzn: 'DE-LU', start: berlinDayStart() - 86400, end: Math.floor(Date.now() / 1000) }, 'price'),
   ]);
 
   const [sigR, priR] = results;
