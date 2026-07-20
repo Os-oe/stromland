@@ -15,6 +15,7 @@ const hex = (h) => {
 };
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const lerp = (a, b, t) => a + (b - a) * t;
+const fract = (x) => x - Math.floor(x);
 const mix = (c1, c2, t) => [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
 const rgba = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -57,6 +58,9 @@ export class Painter {
     this.turbineAngle = 0;
     this.w = 0; this.h = 0;
     this.quality = 1;      // 0.4..1 — adaptives Budget (main.js)
+    this.motionScale = 1;  // <1 bei prefers-reduced-motion: Amplituden/Tempi gedrosselt
+    this.breathe = 0;      // Netzfrequenz-Atmung (main.js) — moduliert Nebel/Mond-Hof
+    this.meteor = null;    // aktive Sternschnuppe
     this.snap = null;
     this.norm = null;
     this.riverPath = null; // [{x,y,w}]
@@ -166,6 +170,15 @@ export class Painter {
     for (const [x, y] of m0) this.seaClip.lineTo(x, y);
     this.seaClip.lineTo(w, 0);
     this.seaClip.closePath();
+
+    // Reiner Himmel: oberhalb des HINTERSTEN Kamms — Funkeln/Sternschnuppen
+    // werden hierauf geclippt, nie über den Bergkämmen.
+    this.skyClip = new Path2D();
+    const b0 = this.ridges.back[0].pts;
+    this.skyClip.moveTo(0, 0);
+    for (const [x, y] of b0) this.skyClip.lineTo(x, y);
+    this.skyClip.lineTo(w, 0);
+    this.skyClip.closePath();
 
     this.particles = [];
   }
@@ -848,7 +861,7 @@ export class Painter {
   }
 
   // ---------- Dynamik (je Frame) ----------
-  render(ctx, tMs, dtMs, freq) {
+  render(ctx, tMs, dtMs, freq, breathe = 0) {
     if (!this.snap) return;
     this.ensureLayers();
     const { w, h } = this;
@@ -856,9 +869,14 @@ export class Painter {
     const hor = h * COMPOSITION.horizon;
     const dt = Math.min(0.1, dtMs / 1000);
     const unrest = clamp01(Math.abs(freq.dev) / 0.06);
+    this.breathe = breathe;
 
     // Statik-Komposit (sky+celestial+far+mid+river) in einem Zug
     ctx.drawImage(this.staticC, 0, 0);
+
+    // Nachthimmel lebt: individuelles Sternen-Funkeln, gelegentliche Sternschnuppe,
+    // Mond-Hof atmet mit der Netzfrequenz — additiv und klein, Statik unangetastet
+    if (p.weights.wNight > 0.05 && !DBG.has('nosky')) this.renderNightSky(ctx, tMs, dt, breathe);
 
     // Offshore-Schimmer (dynamisch flackernd) — nur im Horizont-Spalt sichtbar:
     // geclippt auf die Region über dem vordersten Mittelgrund-Kamm, nie über Hügeln.
@@ -896,6 +914,26 @@ export class Painter {
         ctx.moveTo(tb.x, tb.y - tb.s);
         ctx.lineTo(tb.x + Math.cos(ba) * tb.s * 0.62, tb.y - tb.s + Math.sin(ba) * tb.s * 0.62);
         ctx.stroke();
+      }
+      // Luftfahrt-Warnlichter (nachts): reale Windparks blinken nahezu SYNCHRON —
+      // Periode ~3 s, weicher Blitz, winziger roter Punkt auf der Gondel + Hauch Glow.
+      // Tagsüber aus. Der Versatz je Rad ist klein (≤ ~300 ms) — synchroner Look.
+      const nightW = p.weights.wNight;
+      if (nightW > 0.3) {
+        const ph = ((tMs + tb.phase * 48) % 3000) / 3000;
+        const pulse = Math.exp(-((ph - 0.5) ** 2) / 0.0045);
+        if (pulse > 0.02) {
+          const aL = 0.7 * pulse * Math.min(1, (nightW - 0.3) / 0.4);
+          const ry = tb.y - tb.s;
+          const rr = Math.max(1.1, tb.s * 0.055);
+          const glow = ctx.createRadialGradient(tb.x, ry, 0, tb.x, ry, rr * 3.4);
+          glow.addColorStop(0, rgba([255, 64, 54], aL * 0.4));
+          glow.addColorStop(1, rgba([255, 64, 54], 0));
+          ctx.fillStyle = glow;
+          ctx.fillRect(tb.x - rr * 3.4, ry - rr * 3.4, rr * 6.8, rr * 6.8);
+          ctx.fillStyle = rgba([255, 84, 72], aL);
+          ctx.beginPath(); ctx.arc(tb.x, ry, rr, 0, Math.PI * 2); ctx.fill();
+        }
       }
     }
 
@@ -967,11 +1005,93 @@ export class Painter {
     if (!DBG.has('nofog')) this.renderFog(ctx, tMs, unrest);
   }
 
+  // Nachthimmel-Dynamik: geclippt auf den reinen Himmel (nie über Kämmen).
+  renderNightSky(ctx, tMs, dt, breathe) {
+    const { h } = this;
+    const p = this.paletteMix, n = this.norm;
+    const nightW = p.weights.wNight;
+    const hor = h * COMPOSITION.horizon;
+    const ms = this.motionScale;
+    ctx.save();
+    ctx.clip(this.skyClip);
+
+    // Sterne funkeln individuell: Subset der statisch gezeichneten Population,
+    // additive Aufhellung mit eigener Rate+Phase je Stern (kein Global-Pulsieren)
+    const staticCount = Math.floor(this.stars.length * nightW * (0.35 + 0.65 * n.clarity));
+    const twinkles = Math.min(160, staticCount);
+    for (let i = 0; i < twinkles; i++) {
+      const st = this.stars[i];
+      const rate = 0.7 + fract(st.m * 7.31) * 1.8;           // 0.7–2.5 Hz, je Stern
+      const tw = 0.5 + 0.5 * Math.sin(tMs * 0.0022 * rate * (0.5 + 0.5 * ms) + st.tw * 7);
+      const aTw = (0.10 + 0.40 * st.m) * nightW * tw * (0.55 + 0.45 * ms);
+      if (aTw < 0.02) continue;
+      const r = st.m > 0.92 ? 1.8 : st.m > 0.6 ? 1.3 : 0.9;
+      ctx.fillStyle = rgba(mix([225, 230, 248], p[3], 0.18), aTw);
+      ctx.fillRect(st.x, st.y, r, r);
+    }
+
+    // Sternschnuppe: alle ~30–60 s, ~1 s Lebensdauer, dezent — nur bei tiefer Nacht
+    if (ms > 0.6) {
+      if (!this.meteor && nightW > 0.4) {
+        this._meteorCd = (this._meteorCd ?? (14 + this.rand() * 30)) - dt;
+        if (this._meteorCd <= 0) {
+          const R = this.rand;
+          this.meteor = {
+            x: this.w * (0.15 + R() * 0.7), y: h * (0.05 + R() * 0.28),
+            dx: (R() < 0.5 ? 1 : -1) * Math.cos(0.32 + R() * 0.2),
+            dy: Math.sin(0.32 + R() * 0.2),
+            len: this.w * (0.045 + R() * 0.05), t: 0, dur: 1.0,
+          };
+          this._meteorCd = 30 + R() * 30; // nächste in 30–60 s
+        }
+      }
+      if (this.meteor) {
+        const m = this.meteor;
+        m.t += dt;
+        if (m.t >= m.dur || nightW < 0.3) { this.meteor = null; }
+        else {
+          const pr = m.t / m.dur;
+          const fade = Math.sin(pr * Math.PI);
+          const hx = m.x + m.dx * this.w * 0.14 * pr;
+          const hy = m.y + m.dy * this.w * 0.14 * pr;
+          const tailX = hx - m.dx * m.len * (0.5 + 0.5 * fade);
+          const tailY = hy - m.dy * m.len * (0.5 + 0.5 * fade);
+          const g = ctx.createLinearGradient(hx, hy, tailX, tailY);
+          const mc = mix([235, 238, 250], p[3], 0.15);
+          g.addColorStop(0, rgba(mc, 0.5 * fade * nightW));
+          g.addColorStop(1, rgba(mc, 0));
+          ctx.strokeStyle = g;
+          ctx.lineWidth = 1.2;
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tailX, tailY); ctx.stroke();
+        }
+      }
+    }
+
+    // Mond-Hof pulsiert ganz leicht mit der Netzfrequenz-Atmung (nur positive
+    // Halbwelle — bei reduced-motion/50,000 Hz exakt Null, Standbild identisch)
+    if (nightW > 0.25) {
+      const mp = this.moonPos();
+      const pulse = Math.max(0, breathe * 1.4) * nightW;
+      if (mp.y < hor && pulse > 0.004) {
+        const moonC = mix([225, 226, 238], p[3], 0.18);
+        const r = h * 0.022;
+        const halo = ctx.createRadialGradient(mp.x, mp.y, 0, mp.x, mp.y, r * 6);
+        halo.addColorStop(0, rgba(moonC, pulse));
+        halo.addColorStop(0.4, rgba(moonC, pulse * 0.45));
+        halo.addColorStop(1, rgba(moonC, 0));
+        ctx.fillStyle = halo;
+        ctx.fillRect(mp.x - r * 6, mp.y - r * 6, r * 12, r * 12);
+      }
+    }
+    ctx.restore();
+  }
+
   renderRiverShimmer(ctx, tMs) {
     const n = this.norm, p = this.paletteMix, s = this.snap;
     const dir = n.pumping ? -1 : 1; // Pumpspeicher: „Wasser fließt bergauf"
     const count = Math.floor((26 + n.hydro * 40) * this.quality);
-    const speed = 0.06 * dir * (0.5 + n.hydro);
+    const speed = 0.085 * dir * (0.55 + n.hydro) * this.motionScale;
     // Gegenlicht: steht die Sonne tief, fängt das Wasser den Himmel — warmer Sheen
     const lowSun = Math.max(0, Math.min(1, (16 - Math.abs(s.sunElev - 6)) / 16)) * (s.sunElev > -8 ? 1 : 0);
     // Nachts fängt der Fluss das Mondlicht: kühler Silber-Glint statt dunkler Riss
@@ -989,7 +1109,7 @@ export class Painter {
       const q = this.riverAt(t);
       const off = Math.sin(i * 12.9898) * q.wd * widthF * 0.34;
       const len = q.wd * widthF * (0.12 + 0.1 * Math.sin(i * 3.1 + tMs * 0.001));
-      const a = (0.10 + 0.04 * moonGlint + 0.25 * n.hydro * (0.4 + 0.6 * Math.sin(tMs * 0.002 + i * 1.7) ** 2)) * glossBoost;
+      const a = (0.13 + 0.06 * moonGlint + 0.25 * n.hydro * (0.4 + 0.6 * Math.sin(tMs * 0.002 + i * 1.7) ** 2)) * glossBoost;
       ctx.strokeStyle = rgba(gloss, Math.min(0.6, a));
       ctx.lineWidth = Math.max(0.6, q.wd * widthF * 0.035);
       ctx.beginPath();
@@ -997,15 +1117,40 @@ export class Painter {
       ctx.lineTo(q.x + off + len / 2, q.y + (dir < 0 ? -q.wd * 0.02 : q.wd * 0.02));
       ctx.stroke();
     }
+
+    // Wandernde Glitzerpunkte: das Wasser blitzt PERMANENT — tags Sonnenglitzer,
+    // nachts Mond-/Sternenglitzer. Jeder Punkt lebt ~1–2 s an einer neuen Stelle.
+    const sparks = Math.floor(9 * this.quality) + 3;
+    const spC = mix(gloss, [255, 253, 244], 0.5);
+    for (let i = 0; i < sparks; i++) {
+      const cyc = tMs * 0.0008 * (0.6 + fract(i * 0.37) * 0.9) * Math.max(0.35, this.motionScale) + i * 0.719;
+      const k = Math.floor(cyc);
+      const ph = cyc - k;
+      const rt = fract(Math.sin(k * 127.1 + i * 311.7) * 43758.5453);
+      const q = this.riverAt(0.05 + rt * 0.92);
+      const off = (fract(Math.sin(k * 269.5 + i * 183.3) * 28001.83) - 0.5) * q.wd * widthF * 0.6;
+      const tw2 = Math.sin(ph * Math.PI) ** 2;
+      const a2 = tw2 * (0.26 + 0.30 * nightW + 0.25 * lowSun);
+      if (a2 < 0.02) continue;
+      const sz = Math.max(0.9, q.wd * widthF * 0.03) * (0.7 + rt);
+      ctx.fillStyle = rgba(spC, Math.min(0.8, a2));
+      ctx.fillRect(q.x + off - sz / 2, q.y - sz / 2, sz, sz * 0.8);
+    }
+  }
+
+  // Tiefen-Ebene je Partikel: 3 Geschwindigkeits-/Größen-Klassen → Parallax-Gefühl
+  particleDepth() {
+    const r = this.rand();
+    return r < 0.3 ? 0.55 : r < 0.78 ? 1 : 1.6;
   }
 
   renderParticles(tMs, dt, unrest) {
     const { w, h } = this;
     const n = this.norm, p = this.paletteMix;
     const pctx = this.pctx;
-    // Nachleuchten ausblenden
+    // Nachleuchten ausblenden — langsamer als früher: längere, leuchtendere Trails
     pctx.globalCompositeOperation = 'destination-out';
-    pctx.fillStyle = 'rgba(0,0,0,0.10)';
+    pctx.fillStyle = 'rgba(0,0,0,0.07)';
     pctx.fillRect(0, 0, w, h);
     pctx.globalCompositeOperation = 'source-over';
 
@@ -1016,25 +1161,32 @@ export class Painter {
     while (this.particles.length < target) {
       this.particles.push({
         x: R() * w, y: R() * h * 0.92,
-        age: R() * 6, maxAge: 3 + R() * 6,
+        age: R() * 6, maxAge: 3 + R() * 6, d: this.particleDepth(),
       });
     }
     if (this.particles.length > target) this.particles.length = target;
 
-    const speed = (18 + 150 * n.windOn) * (1 + unrest * 0.35);
+    // Baseline sichtbar auch bei Schwachwind — der Wind schläft nie ganz
+    const speed = (30 + 150 * n.windOn) * (1 + unrest * 0.35) * Math.max(0.4, this.motionScale);
     const fieldT = tMs * 0.00004;
-    const windC = mix(mix(p[3], [255, 252, 244], 0.3), p[2], 0.3);
+    // tags leicht in den Himmels-Tiefton gezogen: helle Fäden wären vor dem
+    // hellen Mittagshimmel unsichtbar — nachts bleibt der warme Lichtfaden
+    const dayW = p.weights.wDay;
+    const windC = mix(
+      mix(mix(p[3], [255, 252, 244], 0.3), p[2], 0.3),
+      mix(p[1], p[0], 0.5), 0.35 * dayW);
     pctx.lineCap = 'round';
     for (const pt of this.particles) {
+      const d = pt.d || 1;
       const a = this.noise.fbm(pt.x * 0.0016, pt.y * 0.0021 + fieldT, 3) * Math.PI * 1.6;
       const vx = Math.cos(a) * 0.35 + 1.0; // Grunddrift W→O
       const vy = Math.sin(a) * 0.30;
-      const nx = pt.x + vx * speed * dt;
-      const ny = pt.y + vy * speed * dt * 0.7;
+      const nx = pt.x + vx * speed * d * dt;
+      const ny = pt.y + vy * speed * d * dt * 0.7;
       const heightFade = pt.y < h * COMPOSITION.horizon ? 1 : 0.45;
       const lifeFade = Math.sin(clamp01(pt.age / pt.maxAge) * Math.PI);
-      pctx.strokeStyle = rgba(windC, (0.065 + 0.13 * n.windOn) * lifeFade * heightFade);
-      pctx.lineWidth = pt.y > h * 0.5 ? 1.25 : 0.9;
+      pctx.strokeStyle = rgba(windC, (0.09 + 0.13 * n.windOn) * (1 + 0.25 * dayW) * lifeFade * heightFade * (0.65 + 0.35 * d));
+      pctx.lineWidth = (pt.y > h * 0.5 ? 1.25 : 0.9) * (0.72 + 0.32 * d);
       pctx.beginPath();
       pctx.moveTo(pt.x, pt.y);
       pctx.lineTo(nx, ny);
@@ -1043,10 +1195,10 @@ export class Painter {
       pt.age += dt;
       if (pt.x > w + 8) {
         // rechts raus → links wieder rein (Fluss des Windes)
-        pt.x = -6; pt.y = Math.pow(R(), 1.4) * h * 0.9; pt.age = 0; pt.maxAge = 3 + R() * 6;
+        pt.x = -6; pt.y = Math.pow(R(), 1.4) * h * 0.9; pt.age = 0; pt.maxAge = 3 + R() * 6; pt.d = this.particleDepth();
       } else if (pt.age > pt.maxAge || pt.y < -8 || pt.y > h) {
         // Alterstod → irgendwo neu (keine Links-Häufung)
-        pt.x = R() * w; pt.y = Math.pow(R(), 1.4) * h * 0.9; pt.age = 0; pt.maxAge = 3 + R() * 6;
+        pt.x = R() * w; pt.y = Math.pow(R(), 1.4) * h * 0.9; pt.age = 0; pt.maxAge = 3 + R() * 6; pt.d = this.particleDepth();
       }
     }
   }
@@ -1055,27 +1207,32 @@ export class Painter {
     const { w, h } = this;
     const p = this.paletteMix;
     const hor = h * COMPOSITION.horizon;
+    const ms = this.motionScale;
     // gedeckter Dunstton: Himmel×Kamm mit nur einem Hauch Glutlicht (bei Dusk sonst orange)
     const fogC = mix(mix(p[2], p[5], 0.5), p[4], 0.18);
+    // sp in px/s bei 1600 px Breite — Drift muss in SEKUNDEN wahrnehmbar sein,
+    // drei Tempi = Parallax der Nebelschichten
     const bands = [
-      { y: hor + h * 0.026, hh: h * 0.026, sp: 6, a: 0.06 },
-      { y: hor + h * 0.085, hh: h * 0.034, sp: 10, a: 0.07 },
-      { y: hor - h * 0.024, hh: h * 0.018, sp: 4, a: 0.05 },
+      { y: hor + h * 0.026, hh: h * 0.026, sp: 26, a: 0.06 },
+      { y: hor + h * 0.085, hh: h * 0.034, sp: 40, a: 0.07 },
+      { y: hor - h * 0.024, hh: h * 0.018, sp: 15, a: 0.05 },
     ];
     const stamps = Math.floor(22 * this.quality);
+    // Atmung des Netzes im Nebel: Glow-Reaktion statt globaler Helligkeit
+    const breatheF = Math.max(0.4, 1 + this.breathe * 2.4);
     for (let b = 0; b < bands.length; b++) {
       const bd = bands[b];
-      const drift = tMs * 0.001 * bd.sp * (1 + unrest * 2.2);
+      const drift = tMs * 0.001 * bd.sp * (w / 1600) * ms * (1 + unrest * 1.8);
       for (let i = 0; i < stamps; i++) {
         // unregelmäßig: Position, Breite und Alpha je Stamp aus Noise — nie ein
         // durchgehender Streifen
         const nz = this.noise.at(i * 3.31 + b * 17, 2.9);
         const x = ((i / stamps) * w * 1.35 + i * i * 13.7 % w * 0.2 + drift * (0.7 + nz * 0.4)) % (w * 1.35) - w * 0.175;
-        const jitterY = this.noise.fbm(i * 0.6 + b * 11, tMs * 0.00018, 2) * bd.hh * (2.2 + unrest * 5);
+        const jitterY = this.noise.fbm(i * 0.6 + b * 11, tMs * 0.00045 * ms, 2) * bd.hh * (2.2 + unrest * 5);
         const bw = w * (0.09 + 0.13 * Math.abs(this.noise.at(i * 1.7, b * 7)));
-        const gate = 0.5 + 0.5 * this.noise.at(i * 2.2 + b * 3, tMs * 0.00025);
+        const gate = 0.5 + 0.5 * this.noise.at(i * 2.2 + b * 3, tMs * 0.0005 * ms);
         if (gate < 0.35) continue; // Lücken
-        ctx.globalAlpha = bd.a * gate * (0.85 + unrest * 0.6);
+        ctx.globalAlpha = bd.a * gate * (0.85 + unrest * 0.6) * breatheF;
         this.stampBrush(ctx, x, bd.y + jitterY, bw, bd.hh * (1.6 + nz), fogC);
       }
     }
