@@ -1,0 +1,6 @@
+[01:00] sky: delta=0.950
+[01:00] mid: delta=0.885
+[01:00] river: delta=1.156
+[13:00] sky: delta=0.734
+[13:00] mid: delta=1.163
+[13:00] river: delta=1.175

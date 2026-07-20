@@ -70,6 +70,37 @@ Daten-Kunst-/Canvas-Projekte.
 - `/public_power`-404 direkt nach Mitternacht ist NICHT mit einem festen Grace-Fenster
   lösbar (Beobachtung: 00:52 noch leer) — auf 404 einmal mit Vortags-Mitternacht retrien.
 
+## Lebendigkeits-Runde (20.07.)
+
+- **Standbild-QA beweist keine Lebendigkeit.** Alle Gates bewerteten einzelne
+  Frames — der User sah 20 Sekunden. Ein „lebendes Gemälde" braucht ein
+  MOTION-Gate: 2 Frames im Abstand von Sekunden, Pixel-Delta pro Region über
+  kalibrierter Schwelle. Das Vorher riss 3 von 6 Schwellen — messbar genau das,
+  was der User „langweilig" nannte.
+- **Motion messen heißt Störer ausschalten:** animiertes Korn flutet jede
+  Delta-Metrik (→ `?grain=0`), das adaptive Qualitäts-Budget repainted Statik
+  zwischen den Frames (→ `?q=1`-Pin), und CSS-`brightness()` arbeitet in
+  **linearRGB** — im sRGB-Screenshot per Gain-Match nicht kürzbar (→ `?filter=0`).
+  Erst mit allen drei Schaltern fällt der Rausch-Floor auf ~0,003–0,08 und die
+  Schwellen werden trennscharf. Solche Mess-Schalter gehören als Query-Params in
+  die App (Prod-Verhalten identisch), nicht als Test-Hacks in die Suite.
+- **Bewegung, die man in 5 s spüren soll, braucht Perioden in Sekunden.**
+  Nebel-Drift 4–10 px/s liest als Standbild; 15–40 px/s in drei Tempi liest als
+  Wetter. Dasselbe Prinzip überall: Glitzerpunkte mit 1–2-s-Leben, Funkeln mit
+  0,7–2,5 Hz, Warnlicht-Blitz mit 3-s-Periode.
+- **Intro als Replay-Variante, nicht als Neubau:** die vorhandene
+  Offset-Mechanik (`replayOffsetMin`) + eine gewichtete Zeitachse (Gauß ums
+  Sonnenhorizont-Fenster = verweilen, Nacht = eilen, Ende-Rampe = settle) ergibt
+  eine Kino-Fahrt in ~80 Zeilen. Voraussetzung: das Datenfenster muss den Vortag
+  enthalten — sonst zeigt „gestern Mittag" keine Sonne (Daten-Lookup wrappt
+  notfalls auf denselben Uhrzeit-Punkt des verfügbaren Tages).
+- **Abbruch-Klick schlucken:** `pointerdown` (capture) bricht das Intro ab, aber
+  der nachfolgende `click` würde die Galerie togglen — ein 800-ms-Schluck-Fenster
+  auf dem capture-`click` löst das sauber.
+- `/frequency`-Upstream liefert vereinzelt Artefakte außerhalb 49,5–50,5 Hz —
+  das echte Netz tut das nie (Lastabwurf ab 49,0). Im Proxy filtern, nicht im
+  Client tolerieren.
+
 ## Vercel
 
 - `vercel alias set` meldet „no access to domain" für **Projekt-Domains** —

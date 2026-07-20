@@ -1,0 +1,55 @@
+STROMLAND — Lebendigkeits-Runde (iter4) · Motion-Report · 2026-07-20
+=====================================================================
+
+Messaufbau (Gate-Metrik, tests/suite-liveliness.py):
+  ?mock=1&seed=7&at=… &grain=0&q=1&filter=0 · Viewport 1280x800
+  2 Frames im Abstand von 3 s, mittlerer |Pixel-Delta| pro Subpixel
+  nach 4x-Box-Downscale, in 3 Regionen:
+    sky   = (80,  60, 1200, 512)   Himmel-Band (bis knapp über Horizont)
+    mid   = (80, 528, 1200, 648)   Mittelgrund-Band
+    river = (430, 600,  900, 784)  Fluss-Band
+  Testparams: grain=0 (Korn ist animiert und flutet jede Messung),
+  q=1 (kein adaptiver Statik-Repaint zw. Frames), filter=0 (globale
+  Brightness-Atmung arbeitet in linearRGB, im sRGB-Shot nicht kürzbar).
+
+Rausch-Floor (alle Dynamik-Layer via ?dbg aus, nur Rotoren drehen):
+  01:00  sky 0.003 · mid 0.002 · river 0.072
+  13:00  sky 0.068 · mid 0.077 · river 0.075
+
+VORHER (Commit a9a998a, nur Mess-Schalter gepatcht, 2 Läufe):
+  01:00  sky 0.285–0.291 · mid 0.273–0.285 · river 0.533–0.565
+  13:00  sky 0.131–0.131 · mid 0.328–0.344 · river 0.169–0.380
+
+NACHHER (Lebendigkeits-Runde, 5 Läufe über die Kalibrierung):
+  01:00  sky 0.640–0.951 · mid 0.426–0.607 · river 0.596–0.987
+  13:00  sky 0.204–0.234 · mid 0.415–0.508 · river 0.216–0.351
+
+Gate-Schwellen (deutlich über Floor, mit Abstand unter dem Ist):
+  01:00  sky > 0.40 · mid > 0.28 · river > 0.42
+  13:00  sky > 0.14 · mid > 0.28 · river > 0.16
+  → Das VORHER reißt 3 der 6 Schwellen (01:00 sky 0.29, 01:00 mid 0.27,
+    13:00 sky 0.13) — das Gate misst genau die Lücke, die der User gespürt hat.
+
+Was die Deltas treibt (neu in iter4):
+  · Wind-Partikel: Baseline-Speed 30 (nie null), 3 Tiefen-Ebenen (0.55/1/1.6),
+    Trails länger+heller (Fade 0.10→0.07), tags leicht in den Himmels-Tiefton
+  · Nebelbänder: Drift 15–40 px/s (vorher 4–10) — in Sekunden wahrnehmbar,
+    3 Tempi = Parallax; Alpha atmet mit der Netzfrequenz
+  · Fluss: Shimmer schneller+heller, permanente wandernde Glitzerpunkte
+    (nachts Mond-/Sternenglitzer, ~1–2 s Lebensdauer je Punkt)
+  · Nachthimmel: bis 160 Sterne funkeln individuell (0.7–2.5 Hz), Sternschnuppe
+    alle 30–60 s (1 s, dezent, auf skyClip), Mond-Hof pulsiert mit der Atmung
+  · Windräder: rote Luftfahrt-Warnlichter nachts, nahezu synchron, Periode 3 s
+  · HUD: lebende Frequenz-Sparkline (60-s-Fenster, 4 Samples/s) neben dem Hz-Wert
+
+Beweis-Frames: iter4-night-frameA/B.png (01:00, 3 s Abstand, grain=0)
+               iter4-noon-frameA/B.png (13:00)
+Baseline-Rohdaten: baseline-vorher.txt (alte Metrik, Korn an) ·
+nachher-mit-korn.txt (Gegenstück) — mit Korn dominiert das Korn die Metrik,
+deshalb misst das Gate ohne Korn.
+
+Performance nach iter4:
+  GPU (Metal, 1600x1000): 60.0–60.1 fps @ q=1 (01:00 und 13:00)
+  Intro-Tagesfahrt (GPU): ~47 fps (adaptiv q→0.8, 13.5-s-Kinosequenz)
+  Software (SwiftShader): 43–46 fps @ q=0.85 (13:00/01:00/21:30)
+  Mobile-Viewport 390x844 (Software): 60 fps @ q=1

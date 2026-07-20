@@ -1,0 +1,6 @@
+[01:00] sky: delta=0.831 (Schwelle 0.45)
+[01:00] mid: delta=1.046 (Schwelle 0.45)
+[01:00] river: delta=1.261 (Schwelle 0.6)
+[13:00] sky: delta=0.697 (Schwelle 0.45)
+[13:00] mid: delta=1.082 (Schwelle 0.6)
+[13:00] river: delta=1.138 (Schwelle 0.6)

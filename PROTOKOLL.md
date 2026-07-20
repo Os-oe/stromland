@@ -139,6 +139,64 @@ präsente Blinzel-Sonne, besonntes goldgrünes Land; das Dunstband ist ein schma
 warmer Saum. Ehrlich: im Vergleich zu Dusk/Nacht bleibt es das leiseste der vier
 Bilder, aber es liest jetzt als Triumph, nicht als Milch.
 
+## Lebendigkeits-Runde (iter4, 2026-07-20, Fix-Session)
+
+**Anlass:** Echtes User-Feedback vom Erstbesuch nachts ~00:30: „Da passiert nicht viel
+und es sieht sehr langweilig aus." Diagnose: alle bisherigen QA-Runden bewerteten
+STANDBILDER — die gefühlte Lebendigkeit über 10–30 s wurde nie geprüft. Nachts
+(Solar 0, Schwachwind) wirkte das Werk fast statisch.
+
+**A — Intro-Tagesfahrt (Signature-Move beim Öffnen):** Jeder normale Load startet
+eine ~13,5-s-Fahrt von gestern-Morgengrauen durch Mittag/Abend bis zum JETZT —
+gewichtete Zeitachse (verweilt an Sonnenauf-/-untergang, eilt durch die Nacht,
+settelt sanft), HUD-Uhr läuft geweckt mit, danach Einblendung „Jetzt — das Bild
+malt live weiter". Wiederverwendet die Replay-Mechanik (`data.replayOffsetMin`).
+Jede Interaktion (Pointer/Taste/Wheel) bricht sofort zum Live-Modus ab; der
+Abbruch-Klick wird geschluckt (kein Galerie-Toggle). Aus bei `?at=`, `?intro=0`,
+`prefers-reduced-motion`. Dafür Datenfenster der Proxies auf **Vortags-Mitternacht →
+jetzt** ausgeweitet (power + price; signal kann kein start/end — Client wrappt
+Zeitpunkte vor Datenbeginn auf denselben Uhrzeit-Punkt des verfügbaren Tages).
+Nebeneffekt: der Nach-Mitternacht-404 ist konstruktiv unmöglich geworden;
+`sceneDayStart()` mappt `?at=`/Archiv-Projektion/„Dieser Tag" auf den jüngsten Datentag.
+
+**B — Fühlbare Dauerbewegung (jede Tageszeit, besonders nachts):**
+1. Partikel: Baseline-Speed 30 (nie null), 3 Tiefen-Ebenen (0.55/1/1.6 → Parallax),
+   Trails länger+heller (Fade 0.10→0.07), tags leicht in den Himmels-Tiefton getönt.
+2. Nebelbänder: Drift 15–40 px/s (vorher 4–10) in drei Tempi — in ≤5 s wahrnehmbar.
+3. Fluss: Shimmer schneller/heller + permanente wandernde Glitzerpunkte
+   (nachts Mond-/Sternenglitzer, je Punkt ~1–2 s Lebensdauer).
+4. Nachthimmel: bis 160 Sterne funkeln individuell (0.7–2.5 Hz, additiv, auf
+   `skyClip` — nie über Kämmen); Sternschnuppe alle 30–60 s (1 s, dezent);
+   Mond-Hof pulsiert mit der Netzfrequenz-Atmung (nur positive Halbwelle → bei
+   reduced-motion exakt 0).
+5. Windräder nachts: rote Luftfahrt-Warnlichter auf den Gondeln, nahezu synchron
+   (Versatz ≤ ~300 ms), Periode 3 s, weicher Blitz — tagsüber aus.
+6. HUD: lebende Frequenz-Sparkline (60-s-Fenster, 4 Samples/s, Schreibkopf-Punkt)
+   neben dem Hz-Wert; persistenter Canvas überlebt die innerHTML-Updates.
+7. Atmung: Amplitude leicht rauf, zusätzlich moduliert sie jetzt Nebel-Alpha und
+   Mond-Hof (Glow-Reaktion statt nur globaler Helligkeit).
+
+**Motion-Gate (neu, `tests/suite-liveliness.py`):** 2 Frames im Abstand 3 s bei
+01:00 UND 13:00, mittlerer Pixel-Delta in 3 Regionen (Himmel/Mittelgrund/Fluss)
+nach 4x-Downscale > kalibrierte Schwelle. Messschalter `?grain=0&q=1&filter=0`
+(Korn ist animiert und flutet die Metrik; adaptive Qualität repainted sonst
+Statik zwischen den Frames; CSS-brightness arbeitet in linearRGB und ist im
+sRGB-Shot nicht kürzbar — alles Testparams, Prod identisch). Rausch-Floor
+0.002–0.077; das VORHER reißt 3 der 6 Schwellen — das Gate misst exakt die
+Lücke aus dem User-Feedback. Zusätzlich testet die Suite Intro-Lauf, Uhr-Wanderung,
+Klick-Abbruch ohne Galerie-Toggle, Auto-Settle + Hint, `?intro=0`, reduced-motion.
+Details + Vorher/Nachher-Deltas: `shots/iter4/iter4-motion-report.txt`.
+
+**Nebenbefund gehärtet:** `/frequency`-Upstream liefert vereinzelt Mess-Artefakte
+außerhalb 49,5–50,5 Hz (Suite-Flake) → Proxy filtert unsinnige Samples
+(das deutsche Netz verlässt das Band real nie; Lastabwurf beginnt bei 49,0).
+
+**Gates:** `suite-api` 2× GRÜN (nach Härtung) · `suite-visual` 2× GRÜN ·
+`suite-features` 2× GRÜN · `suite-liveliness` 2× GRÜN. Statik unangetastet:
+13:00 und 21:15 MAD vs. iter3-Referenzen 3,7 (Run-zu-Run-Rauschen ~3,0),
+Zenit-Zeilenmittel exakt identisch. Perf: GPU 60 fps @ q=1 · Intro ~47 fps
+(adaptiv) · Software 43–46 fps @ q=0.85 · Mobile 60 fps.
+
 ## Fürs Video (op-capture-Übergabe)
 
 - **Replay „Dieser Tag"** ist das Capture-Gold: `?mock=1&seed=7` + Klick auf „Dieser Tag" → 40-s-Fahrt Sonnenaufgang→Solarflut→Abendglut→Nacht mit Fortschritts-Hairline.
