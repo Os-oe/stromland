@@ -153,6 +153,14 @@ function stopReplay() {
   painter.coarse = false;
   document.body.classList.remove('replaying');
   document.getElementById('btn-replay').textContent = 'Dieser Tag';
+  forceRefresh();
+}
+
+// Snapshot + HUD im NÄCHSTEN Frame erneuern — nach Replay-/Intro-Ende darf das
+// Bild nicht bis zu 2 s auf dem letzten Fahrt-Moment stehen bleiben
+function forceRefresh() {
+  lastSnapAt = -1e9;
+  lastHudAt = -1e9;
 }
 
 function tickReplay(t) {
@@ -222,6 +230,7 @@ function endIntro(settled) {
   if (!replay) painter.coarse = false;
   document.body.classList.remove('introing');
   document.getElementById('hud').classList.remove('wake');
+  forceRefresh();
   if (settled) {
     const lh = document.getElementById('live-hint');
     lh.classList.add('show');

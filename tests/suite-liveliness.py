@@ -104,6 +104,21 @@ with sync_playwright() as p:
         ok(not page.evaluate('window.__stromland.introActive()'), 'Klick bricht Intro ab')
         ok(page.evaluate('window.__stromland.data.replayOffsetMin === null'), 'Offset nach Abbruch zurückgesetzt')
         ok(not page.evaluate("document.body.classList.contains('gallery')"), 'Abbruch-Klick togglet NICHT die Galerie')
+        # Nach dem Abbruch muss Szene/HUD SOFORT im Jetzt sein — nicht bis zu 2 s
+        # auf dem letzten Fahrt-Moment stehen (forceRefresh-Regression)
+        import datetime
+        snap_min = page.evaluate('window.__stromland.data.snapshot().minutes')
+        try:
+            from zoneinfo import ZoneInfo
+            now_b = datetime.datetime.now(ZoneInfo('Europe/Berlin'))
+        except Exception:
+            now_b = datetime.datetime.now()
+        now_min = now_b.hour * 60 + now_b.minute
+        drift = min(abs(snap_min - now_min), 1440 - abs(snap_min - now_min))
+        ok(drift < 3, f'Nach Abbruch zeigt die Szene das Jetzt (Δ={drift:.1f} min)')
+        hud_now = page.text_content('#hud-title')
+        ok(f'{now_b.hour:02d}:' in hud_now or f'{(now_b.hour + (1 if now_b.minute == 59 else 0)) % 24:02d}:' in hud_now,
+           f'HUD-Uhr nach Abbruch im Jetzt („{hud_now}")')
         page.close()
 
         # 3) Intro läuft komplett durch → settelt im Jetzt, Live-Hint erscheint
