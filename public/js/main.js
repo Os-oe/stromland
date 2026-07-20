@@ -231,6 +231,7 @@ function endIntro(settled) {
   document.body.classList.remove('introing');
   document.getElementById('hud').classList.remove('wake');
   forceRefresh();
+  window.__stromland._introEnd = settled ? 'settled' : 'aborted'; // Test-Sicht
   if (settled) {
     const lh = document.getElementById('live-hint');
     lh.classList.add('show');

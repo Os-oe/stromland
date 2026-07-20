@@ -121,15 +121,24 @@ with sync_playwright() as p:
            f'HUD-Uhr nach Abbruch im Jetzt („{hud_now}")')
         page.close()
 
-        # 3) Intro läuft komplett durch → settelt im Jetzt, Live-Hint erscheint
+        # 3) Intro läuft komplett durch → settelt im Jetzt, Live-Hint erscheint.
+        # Robust gegen Netz-Latenz: auf das Intro-Ende POLLEN statt fixer Wartezeit.
         page = browser.new_page(viewport={'width': 1280, 'height': 800})
         page.goto(f'{BASE}/?mock=1&seed=7')
         page.wait_for_load_state('networkidle')
-        page.wait_for_timeout(14500)
-        ok(not page.evaluate('window.__stromland.introActive()'), 'Intro endet von selbst (~13,5 s)')
+        page.wait_for_timeout(1000)
+        ok(page.evaluate('window.__stromland.introActive()'), 'Intro läuft (Settle-Durchlauf)')
+        page.wait_for_function('!window.__stromland.introActive()', timeout=20000)
+        end_how = page.evaluate('window.__stromland._introEnd')
+        ok(end_how == 'settled', f'Intro endet von selbst als Settle (nicht Abbruch: {end_how})')
         ok(page.evaluate('window.__stromland.data.replayOffsetMin === null'), 'Nach Settle: Live-Modus (Offset null)')
-        ok(page.evaluate("document.getElementById('live-hint').classList.contains('show')"),
-           'Settle-Hint „Jetzt — das Bild malt live weiter" sichtbar')
+        hint_shown = True
+        try:
+            page.wait_for_function(
+                "document.getElementById('live-hint').classList.contains('show')", timeout=3000)
+        except Exception:
+            hint_shown = False
+        ok(hint_shown, 'Settle-Hint „Jetzt — das Bild malt live weiter" sichtbar')
         page.close()
 
         # 4) ?intro=0 → kein Intro
