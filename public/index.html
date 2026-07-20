@@ -53,10 +53,17 @@
     opacity: 0.85;
   }
   #hud-values .sep { margin: 0 0.7em; opacity: 0.5; }
+  /* Netzfrequenz-Sparkline: lebende Hairline neben dem Hz-Wert */
+  #hud-spark {
+    width: 66px; height: 15px;
+    vertical-align: -3px; margin-left: 0.7em;
+    opacity: 0.8;
+  }
   @media (max-width: 520px) {
     #hud-values { font-size: 10px; letter-spacing: 0.1em; }
     #hud-values .sep { margin: 0 0.4em; }
     #hud-title { letter-spacing: 0.1em; }
+    #hud-spark { width: 48px; height: 12px; margin-left: 0.45em; vertical-align: -2px; }
   }
   #hud-archive {
     margin-top: 6px;
@@ -113,6 +120,20 @@
     #first-hint .fh-mobile { display: inline; }
     #first-hint .fh-sub { display: inline-block; margin-top: 0.9em; max-width: 30ch; }
   }
+  /* Settle-Hint nach der Intro-Tagesfahrt */
+  #live-hint {
+    position: absolute; left: 50%; top: 34%;
+    transform: translateX(-50%);
+    text-align: center;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(12.5px, 1.7vw, 17px);
+    letter-spacing: 0.16em;
+    color: #efe9dc; opacity: 0; transition: opacity 1.4s ease;
+    text-shadow: 0 1px 12px rgba(10, 8, 14, 0.8);
+    pointer-events: none;
+    max-width: 92vw;
+  }
+  #live-hint.show { opacity: 0.85; }
   /* Galerie-Exit-Hint: einmal pro Sitzung, blendet sich selbst aus */
   #gallery-hint {
     position: absolute; left: 50%; bottom: max(30px, env(safe-area-inset-bottom, 0px) + 24px);
@@ -202,6 +223,7 @@
       <span class="fh-sub">„Legende" erklärt jede Ebene · Tippen aufs Bild = Galerie</span>
     </div>
     <div id="replay-progress"><div id="replay-bar"></div></div>
+    <div id="live-hint" aria-hidden="true">Jetzt — das Bild malt live weiter</div>
     <div id="gallery-hint" aria-hidden="true">Tippen oder Esc = zurück</div>
     <div id="hud">
       <div id="hud-title">Stromland</div>

@@ -125,19 +125,40 @@ export class DataModel {
     this.archive = srcs.some((s) => s === 'fixture');
   }
 
+  // Berlin-Mitternacht des Tages, in dem tUnix liegt (DST-fest via Intl)
+  dayStartOf(tUnix) {
+    const bp = berlinParts(new Date(tUnix * 1000));
+    return tUnix - (bp.h * 3600 + bp.mi * 60 + bp.s);
+  }
+
+  // Mitternacht des JÜNGSTEN Datentags. Das Datenfenster reicht bis zum Vortag
+  // zurück (Intro-Tagesfahrt) — at-Override/Projektion müssen auf den letzten Tag
+  // mappen, nicht auf ts[0]. (−1 s: der letzte Fixture-Punkt ist exakt 24:00.)
+  sceneDayStart() {
+    const ts = this.power?.unix_seconds;
+    if (!ts?.length) return this.dayStartOf(Math.floor(Date.now() / 1000));
+    return this.dayStartOf(ts[ts.length - 1] - 1);
+  }
+
+  // Szenen-"Jetzt" OHNE Replay-/Intro-Offset (der natürliche Endpunkt der Fahrt)
+  liveNowUnix() {
+    const ts = this.power?.unix_seconds;
+    if (!ts?.length) return Math.floor(Date.now() / 1000);
+    if (this.atOverride) return this.sceneDayStart() + this.atOverride.h * 3600 + this.atOverride.mi * 60;
+    if (MOCK || this.power?.source === 'fixture') {
+      // Archiv: reale Uhrzeit auf den Fixture-Tag projizieren
+      const now = berlinParts(new Date());
+      return this.sceneDayStart() + now.h * 3600 + now.mi * 60 + now.s;
+    }
+    return Math.floor(Date.now() / 1000);
+  }
+
   // "Jetzt" der Szene als Unix-Sekunden — mit at-Override/Replay auf den Datentag gemappt
   sceneNowUnix() {
     const ts = this.power?.unix_seconds;
     if (!ts?.length) return Math.floor(Date.now() / 1000);
-    const dayStart = ts[0]; // 00:00 Berlin des Datentags
-    if (this.replayOffsetMin != null) return dayStart + Math.floor(this.replayOffsetMin * 60);
-    if (this.atOverride) return dayStart + this.atOverride.h * 3600 + this.atOverride.mi * 60;
-    if (MOCK || this.power?.source === 'fixture') {
-      // Archiv: reale Uhrzeit auf den Fixture-Tag projizieren
-      const now = berlinParts(new Date());
-      return dayStart + now.h * 3600 + now.mi * 60 + now.s;
-    }
-    return Math.floor(Date.now() / 1000);
+    if (this.replayOffsetMin != null) return ts[0] + Math.floor(this.replayOffsetMin * 60);
+    return this.liveNowUnix();
   }
 
   // Momentwerte für den Maler
@@ -146,9 +167,17 @@ export class DataModel {
     const p = this.power, c = this.context;
     const s = p?.series || {};
     const ts = p?.unix_seconds || [];
-    const v = (arr) => valAt(ts, arr, t) ?? 0;
-    const price = c ? valAt(c.price.unix_seconds, c.price.value, t) : null;
-    const share = c ? valAt(c.share.unix_seconds, c.share.share, t) : null;
+    // Liegt t VOR dem Datenfenster (Intro-"gestern" im Archiv-/Fixture-Modus),
+    // auf denselben Uhrzeit-Punkt des verfügbaren Tages wrappen — Palette/Sonne
+    // bleiben auf der echten Szenen-Zeit, nur die Daten-Lookups wrappen.
+    const wrap = (tsArr, tt) => {
+      if (!tsArr?.length || tt >= tsArr[0]) return tt;
+      return tt + Math.ceil((tsArr[0] - tt) / 86400) * 86400;
+    };
+    const tp = wrap(ts, t);
+    const v = (arr) => valAt(ts, arr, tp) ?? 0;
+    const price = c ? valAt(c.price.unix_seconds, c.price.value, wrap(c.price.unix_seconds, t)) : null;
+    const share = c ? valAt(c.share.unix_seconds, c.share.share, wrap(c.share.unix_seconds, t)) : null;
 
     // Szenen-Zeit (Berlin) für Palette/Sonne: aus t rekonstruieren
     const sceneDate = new Date(t * 1000);
